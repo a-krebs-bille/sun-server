@@ -1,12 +1,25 @@
 'use client'
 
-import { useEffect } from 'react'
-import { MapContainer, TileLayer, FeatureGroup, Polygon } from 'react-leaflet'
+import { useEffect, useState } from 'react'
+import { MapContainer, TileLayer, FeatureGroup, Polygon, Marker, Popup } from 'react-leaflet'
 import { EditControl } from 'react-leaflet-draw'
 import 'leaflet/dist/leaflet.css'
 import 'leaflet-draw/dist/leaflet.draw.css'
 import { supabase } from '../../lib/supabase'
-import { useState } from 'react'
+import L from 'leaflet'
+
+const icon = L.icon({
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+})
+
+function getCenter(coordinates: number[][]): [number, number] {
+  const lat = coordinates.reduce((sum, c) => sum + c[0], 0) / coordinates.length
+  const lng = coordinates.reduce((sum, c) => sum + c[1], 0) / coordinates.length
+  return [lat, lng]
+}
 
 export default function DrawMap() {
   const [venues, setVenues] = useState<any[]>([])
@@ -30,20 +43,19 @@ export default function DrawMap() {
         latlng.lat,
         latlng.lng,
       ])
-
+      const name = prompt('Enter venue name:') || 'New Venue'
+      const description = prompt('Enter a short description:') || 'Outdoor seating area'
       const { data, error } = await supabase.from('venues').insert({
-        name: 'New Venue',
-        description: 'Outdoor seating area',
+        name,
+        description,
         lat: coordinates[0][0],
         lng: coordinates[0][1],
         outdoor_area: coordinates,
       }).select()
-
       if (error) {
         console.error('Error saving venue:', error)
       } else {
         setVenues(prev => [...prev, data[0]])
-        alert('Outdoor area saved!')
       }
     }
   }
@@ -58,15 +70,22 @@ export default function DrawMap() {
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         attribution="© OpenStreetMap contributors"
       />
-      {venues.map(venue => (
-        venue.outdoor_area && (
-          <Polygon
-            key={venue.id}
-            positions={venue.outdoor_area}
-            pathOptions={{ color: 'orange', fillColor: 'orange', fillOpacity: 0.4 }}
-          />
-        )
-      ))}
+      {venues.map(venue =>
+        venue.outdoor_area ? (
+          <FeatureGroup key={venue.id}>
+            <Polygon
+              positions={venue.outdoor_area}
+              pathOptions={{ color: 'orange', fillColor: 'orange', fillOpacity: 0.4 }}
+            />
+            <Marker position={getCenter(venue.outdoor_area)} icon={icon}>
+              <Popup>
+                <strong>{venue.name}</strong>
+                <p>{venue.description}</p>
+              </Popup>
+            </Marker>
+          </FeatureGroup>
+        ) : null
+      )}
       <FeatureGroup>
         <EditControl
           position="topright"
