@@ -9,14 +9,14 @@ const plans = [
     price: '€29/mo',
     description: '1 venue listing',
     features: ['Map listing', 'Draw outdoor zones', 'Basic profile'],
-    priceId: 'price_starter',
+    priceId: 'price_1TDsoMA3UcVxTp2hRc3tMcif',
   },
   {
     name: 'Pro',
     price: '€79/mo',
     description: 'Up to 3 venues',
     features: ['Everything in Starter', 'Analytics dashboard', 'Photo gallery', 'Priority placement'],
-    priceId: 'price_pro',
+    priceId: 'price_1TDsooA3UcVxTp2hjXsAL3ew',
     popular: true,
   },
   {
@@ -24,7 +24,7 @@ const plans = [
     price: '€199/mo',
     description: 'Unlimited venues',
     features: ['Everything in Pro', 'Booking module', 'API access', 'Dedicated support'],
-    priceId: 'price_chain',
+    priceId: 'price_1TDspZA3UcVxTp2hOuMrlZZT',
   },
 ]
 
