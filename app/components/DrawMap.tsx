@@ -21,7 +21,7 @@ function getCenter(coordinates: number[][]): [number, number] {
   return [lat, lng]
 }
 
-export default function DrawMap() {
+export default function DrawMap({ search = '' }: { search?: string }) {
   const [venues, setVenues] = useState<any[]>([])
 
   useEffect(() => {
@@ -70,7 +70,9 @@ export default function DrawMap() {
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         attribution="© OpenStreetMap contributors"
       />
-      {venues.map(venue =>
+     {venues
+  .filter(venue => venue.name.toLowerCase().includes(search.toLowerCase()))
+  .map(venue =>
         venue.outdoor_area ? (
           <FeatureGroup key={venue.id}>
             <Polygon
