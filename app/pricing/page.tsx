@@ -39,8 +39,13 @@ export default function Pricing() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ priceId }),
     })
-    const { url } = await res.json()
-    router.push(url)
+    const data = await res.json()
+    console.log('Stripe response:', data)
+    if (data.url) {
+      router.push(data.url)
+    } else {
+      alert('Error: ' + data.error)
+    }
     setLoading(null)
   }
 
