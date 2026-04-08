@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { MapContainer, TileLayer, FeatureGroup, Polygon, Marker, Popup, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, FeatureGroup, Polygon, Marker, Popup, useMap, CircleMarker } from 'react-leaflet'
 import { EditControl } from 'react-leaflet-draw'
 import 'leaflet/dist/leaflet.css'
 import 'leaflet-draw/dist/leaflet.draw.css'
@@ -33,13 +33,34 @@ function makeIcon(sunny: boolean) {
 
 function LocateUser() {
   const map = useMap()
+  const [pos, setPos] = useState<[number, number] | null>(null)
+
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
-      ({ coords }) => map.setView([coords.latitude, coords.longitude], 15),
+      ({ coords }) => {
+        const latlng: [number, number] = [coords.latitude, coords.longitude]
+        setPos(latlng)
+        map.setView(latlng, 15)
+      },
       () => {}
     )
   }, [map])
-  return null
+
+  if (!pos) return null
+  return (
+    <>
+      <CircleMarker
+        center={pos}
+        radius={8}
+        pathOptions={{ color: 'white', weight: 2, fillColor: '#3b82f6', fillOpacity: 1 }}
+      />
+      <CircleMarker
+        center={pos}
+        radius={20}
+        pathOptions={{ color: '#3b82f6', weight: 1, fillColor: '#3b82f6', fillOpacity: 0.15 }}
+      />
+    </>
+  )
 }
 
 function getCenter(coordinates: number[][]): [number, number] {
