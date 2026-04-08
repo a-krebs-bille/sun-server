@@ -76,7 +76,7 @@ export default function Home() {
           fontWeight: '700', cursor: 'pointer',
           boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
         }}>
-          Sun map
+          Map
         </button>
       </div>
 
