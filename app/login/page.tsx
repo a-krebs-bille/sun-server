@@ -34,7 +34,7 @@ export default function Login() {
       justifyContent: 'center',
       height: '100vh',
       gap: '16px',
-      fontFamily: 'sans-serif'
+      fontFamily: 'Helvetica, Arial, sans-serif'
     }}>
       <h1>Business login</h1>
       <input

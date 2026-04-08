@@ -55,7 +55,7 @@ export default function Pricing() {
       flexDirection: 'column',
       alignItems: 'center',
       padding: '60px 20px',
-      fontFamily: 'sans-serif',
+      fontFamily: 'Helvetica, Arial, sans-serif',
     }}>
       <h1 style={{ fontSize: '32px', marginBottom: '8px' }}>Simple pricing</h1>
       <p style={{ color: '#666', marginBottom: '48px' }}>Choose the plan that fits your business</p>

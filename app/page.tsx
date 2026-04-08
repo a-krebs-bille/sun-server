@@ -36,7 +36,7 @@ export default function Home() {
   }
 
   return (
-    <main style={{ fontFamily: 'sans-serif', overflowX: 'hidden' }}>
+    <main style={{ fontFamily: 'Helvetica, Arial, sans-serif', overflowX: 'hidden' }}>
       <nav style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         padding: '20px 40px', position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
@@ -65,7 +65,7 @@ export default function Home() {
           fontSize: '56px', fontWeight: '800', color: 'white',
           margin: '0 0 16px', lineHeight: 1.1,
         }}>
-          Your guide to sunshine.
+          YOUR GUIDE TO SUNSHINE.
         </h1>
         <p style={{ fontSize: '20px', color: 'white', opacity: 0.9, maxWidth: '480px', marginBottom: '40px', lineHeight: 1.6 }}>
           Outdoor seating in the sun — near you.

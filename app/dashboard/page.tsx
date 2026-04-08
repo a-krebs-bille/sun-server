@@ -30,7 +30,7 @@ export default function Dashboard() {
   return (
     <main style={{
       padding: '40px',
-      fontFamily: 'sans-serif'
+      fontFamily: 'Helvetica, Arial, sans-serif'
     }}>
       <h1>Welcome, {user.user_metadata?.business_name || user.email}!</h1>
       <p>This is your business dashboard.</p>

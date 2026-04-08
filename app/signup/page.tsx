@@ -36,7 +36,7 @@ export default function SignUp() {
       justifyContent: 'center',
       height: '100vh',
       gap: '16px',
-      fontFamily: 'sans-serif'
+      fontFamily: 'Helvetica, Arial, sans-serif'
     }}>
       <h1>Register your business</h1>
       <input
