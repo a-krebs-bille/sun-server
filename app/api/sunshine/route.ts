@@ -6,9 +6,9 @@ import { convex } from '@turf/convex'
 import { booleanPointInPolygon } from '@turf/boolean-point-in-polygon'
 import { center } from '@turf/center'
 
-const DEFAULT_BUILDING_HEIGHT = 8 // metres, when OSM has no height tag
-const MAX_SHADOW_LENGTH = 500     // cap shadows at 500m (very low sun)
-const BUILDING_SEARCH_RADIUS = 150 // metres around venue centre
+const DEFAULT_BUILDING_HEIGHT = 12 // metres, when OSM has no height tag (~4 floors)
+const MAX_SHADOW_LENGTH = 500      // cap shadows at 500m (very low sun)
+const BUILDING_SEARCH_RADIUS = 300 // metres around venue centre
 
 // Parse height from OSM tags — tries 'height', 'building:height', then levels * 3m
 function parseHeight(tags: Record<string, string>): number {
