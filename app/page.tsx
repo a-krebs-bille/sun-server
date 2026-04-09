@@ -153,7 +153,7 @@ export default function Home() {
             ←
           </button>
           <input
-            type="text" placeholder="Search venues..."
+            type="text" placeholder="Search..."
             value={search} onChange={e => setSearch(e.target.value)}
             style={{ flex: 1, border: 'none', outline: 'none', fontSize: '16px', minWidth: 0 }}
           />
