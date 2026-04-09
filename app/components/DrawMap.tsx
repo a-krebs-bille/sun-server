@@ -166,7 +166,7 @@ export default function DrawMap({ search = '' }: { search?: string }) {
             )}
             <Marker position={center} icon={makeIcon(sunny)}>
               <Popup>
-                <div style={{ fontFamily: 'sans-serif', minWidth: '150px' }}>
+                <div style={{ fontFamily: 'Helvetica, Arial, sans-serif', minWidth: '150px' }}>
                   <div style={{ fontWeight: 700, fontSize: '15px', marginBottom: '4px' }}>{venue.name}</div>
                   <div style={{ color: '#666', fontSize: '13px', marginBottom: '6px' }}>{venue.description}</div>
                   <div style={{
