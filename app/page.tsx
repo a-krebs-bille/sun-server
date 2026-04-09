@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { supabase } from '../lib/supabase'
 
 const DrawMap = dynamic(() => import('./components/DrawMap'), { ssr: false })
+const ShadowMapView = dynamic(() => import('./components/ShadowMapView'), { ssr: false })
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -228,13 +229,10 @@ export default function Home() {
 
           {/* Map */}
           <div className="sun-map" style={{ flex: '1 1 50%', position: 'relative', minHeight: 0 }}>
-            <DrawMap
-              venues={filtered}
-              isOwner={false}
-              search={search}
-              sunnyOnly={sunnyOnly}
-              onVenueCreated={handleVenueCreated}
-              onUserLocated={setUserPos}
+            <ShadowMapView
+              venues={venues.filter(v => v.outdoor_area)}
+              centerLat={userPos ? userPos[0] : 56.15}
+              centerLng={userPos ? userPos[1] : 10.21}
             />
           </div>
 
