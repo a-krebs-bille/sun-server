@@ -64,30 +64,48 @@ function sampleVenuePoints(venueCoords: [number, number][], venuePolygon: any): 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { lat, lng, outdoor_area } = body as {
+    const { lat, lng, outdoor_area, buildings: clientBuildings } = body as {
       lat: number
       lng: number
       outdoor_area: [number, number][]  // Leaflet [lat, lng]
+      buildings?: any[] | null          // pre-fetched by browser (optional)
     }
 
     // 1. Sun position
     const sunPos = SunCalc.getPosition(new Date(), lat, lng)
     if (sunPos.altitude <= 0) {
-      return NextResponse.json({ is_sunny: false, reason: 'night' })
+      return NextResponse.json({ is_sunny: false, sun_status: 'shaded', reason: 'night' })
     }
 
-    // 2. Fetch nearby buildings from Overpass
-    const query = `[out:json][timeout:15];way["building"](around:${BUILDING_SEARCH_RADIUS},${lat},${lng});out geom;`
+    // 2. Use client-provided buildings (fetched by browser where Overpass works),
+    //    or fall back to server-side Overpass if not provided.
     let buildings: any[] = []
-    try {
-      const res = await fetch('https://overpass-api.de/api/interpreter', {
-        method: 'POST',
-        body: query,
-      })
-      const data = await res.json()
-      buildings = data.elements ?? []
-    } catch {
-      return NextResponse.json({ is_sunny: true, reason: 'overpass_unavailable' })
+    if (clientBuildings != null) {
+      buildings = clientBuildings
+    } else {
+      const query = `[out:json][timeout:15];way["building"](around:${BUILDING_SEARCH_RADIUS},${lat},${lng});out geom;`
+      const OVERPASS_MIRRORS = [
+        'https://overpass-api.de/api/interpreter',
+        'https://overpass.kumi.systems/api/interpreter',
+        'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+      ]
+      let overpassOk = false
+      for (const mirror of OVERPASS_MIRRORS) {
+        try {
+          const controller = new AbortController()
+          const t = setTimeout(() => controller.abort(), 10_000)
+          const res = await fetch(mirror, { method: 'POST', body: query, signal: controller.signal })
+          clearTimeout(t)
+          if (!res.ok) continue
+          const data = await res.json()
+          buildings = data.elements ?? []
+          overpassOk = true
+          break
+        } catch { /* try next */ }
+      }
+      if (!overpassOk) {
+        return NextResponse.json({ is_sunny: null, sun_status: 'unknown', reason: 'overpass_unavailable' })
+      }
     }
 
     // 3. Sun/shadow geometry
