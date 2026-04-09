@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import SunCalc from 'suncalc'
 import { point, polygon, featureCollection } from '@turf/helpers'
-import destination from '@turf/destination'
-import convex from '@turf/convex'
-import booleanPointInPolygon from '@turf/boolean-point-in-polygon'
-import center from '@turf/center'
+import { destination } from '@turf/destination'
+import { convex } from '@turf/convex'
+import { booleanPointInPolygon } from '@turf/boolean-point-in-polygon'
+import { center } from '@turf/center'
 
 const DEFAULT_BUILDING_HEIGHT = 8 // metres, when OSM has no height tag
 const MAX_SHADOW_LENGTH = 500     // cap shadows at 500m (very low sun)
@@ -38,6 +38,7 @@ function buildShadowPolygon(
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const body = await req.json()
   const { lat, lng, outdoor_area } = body as {
     lat: number
@@ -106,4 +107,8 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ is_sunny: true, reason: 'clear' })
+  } catch (err: any) {
+    console.error('Sunshine API error:', err)
+    return NextResponse.json({ is_sunny: true, reason: 'error', error: err?.message }, { status: 200 })
+  }
 }
