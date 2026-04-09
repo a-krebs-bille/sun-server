@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { supabase } from '../lib/supabase'
 
 const DrawMap = dynamic(() => import('./components/DrawMap'), { ssr: false })
+const ShadowMapView = dynamic(() => import('./components/ShadowMapView'), { ssr: false })
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -85,8 +86,16 @@ export default function Home() {
 
     supabase.auth.getSession().then(({ data }) => setIsOwner(!!data.session))
 
-    async function fetchBuildings(lat: number, lng: number) {
-      const query = `[out:json][timeout:15];way["building"](around:300,${lat},${lng});out geom;`
+    // Fetch ALL buildings in one bbox query covering all venues — much faster than one request per venue
+    async function fetchAllBuildings(venues: any[]): Promise<any[] | null> {
+      const lats = venues.map(v => v.lat)
+      const lngs = venues.map(v => v.lng)
+      const pad = 0.004 // ~300m padding
+      const south = Math.min(...lats) - pad
+      const north = Math.max(...lats) + pad
+      const west  = Math.min(...lngs) - pad
+      const east  = Math.max(...lngs) + pad
+      const query = `[out:json][timeout:25];way["building"](${south},${west},${north},${east});out geom;`
       const mirrors = [
         'https://overpass-api.de/api/interpreter',
         'https://overpass.kumi.systems/api/interpreter',
@@ -103,27 +112,47 @@ export default function Home() {
       return null
     }
 
+    // Filter the global building list to only those within ~300m of a venue
+    function buildingsNear(allBuildings: any[], lat: number, lng: number): any[] {
+      return allBuildings.filter(b => {
+        if (!b.geometry?.length) return false
+        const bLat = b.geometry[0].lat
+        const bLng = b.geometry[0].lon
+        const dLat = (bLat - lat) * 111000
+        const dLng = (bLng - lng) * 111000 * Math.cos(lat * Math.PI / 180)
+        return Math.sqrt(dLat * dLat + dLng * dLng) < 350
+      })
+    }
+
     async function loadVenues() {
       const { data } = await supabase.from('venues').select('*')
       if (!data) { setLoading(false); return }
 
-      const withSun = await Promise.all(
-        data.map(async venue => {
-          if (!venue.outdoor_area) return venue
+      // Show venues immediately — sun status loads in the background
+      setVenues(data)
+      setLoading(false)
+
+      const venuesWithArea = data.filter(v => v.outdoor_area)
+      if (venuesWithArea.length === 0) return
+
+      // ONE Overpass request for all venues
+      const allBuildings = await fetchAllBuildings(venuesWithArea)
+
+      // Update each venue's sun status as results come in
+      await Promise.all(
+        venuesWithArea.map(async venue => {
           try {
-            const buildings = await fetchBuildings(venue.lat, venue.lng)
+            const buildings = allBuildings ? buildingsNear(allBuildings, venue.lat, venue.lng) : null
             const res = await fetch('/api/sunshine', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ lat: venue.lat, lng: venue.lng, outdoor_area: venue.outdoor_area, buildings }),
             })
             const { is_sunny, sun_status } = await res.json()
-            return { ...venue, is_sunny, sun_status }
-          } catch { return venue }
+            setVenues(prev => prev.map(v => v.id === venue.id ? { ...v, is_sunny, sun_status } : v))
+          } catch { /* leave venue as-is */ }
         })
       )
-      setVenues(withSun)
-      setLoading(false)
     }
     loadVenues()
   }, [showMap])
@@ -200,13 +229,10 @@ export default function Home() {
 
           {/* Map */}
           <div className="sun-map" style={{ flex: '1 1 50%', position: 'relative', minHeight: 0 }}>
-            <DrawMap
-              venues={filtered}
-              isOwner={false}
-              search={search}
-              sunnyOnly={sunnyOnly}
-              onVenueCreated={handleVenueCreated}
-              onUserLocated={setUserPos}
+            <ShadowMapView
+              venues={venues.filter(v => v.outdoor_area)}
+              centerLat={userPos ? userPos[0] : 56.15}
+              centerLng={userPos ? userPos[1] : 10.21}
             />
           </div>
 
@@ -246,7 +272,7 @@ export default function Home() {
 
       <div style={{ background: 'linear-gradient(135deg, #f97316 0%, #fbbf24 50%, #fde68a 100%)', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '40px 20px' }}>
         <h1 style={{ fontSize: '56px', fontWeight: '800', color: 'white', margin: '0 0 16px', lineHeight: 1.1 }}>
-          YOUR GUIDE TO SUNSHINE.
+          GUIDE TO SUNSHINE.
         </h1>
         <p style={{ fontSize: '20px', color: 'white', opacity: 0.9, maxWidth: '480px', marginBottom: '40px', lineHeight: 1.6 }}>
           Outdoor seating in the sun — near you.
