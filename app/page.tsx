@@ -35,8 +35,8 @@ function formatDist(km: number) {
 function VenueCard({ venue }: { venue: any }) {
   const [vlat, vlng] = venueCenter(venue)
   const status = venue.sun_status ?? (venue.is_sunny ? 'sunny' : 'shaded')
-  const icon = status === 'sunny' ? '☀️' : status === 'partial' ? '🌤️' : '⛅'
-  const label = status === 'sunny' ? 'In the sun' : status === 'partial' ? 'Partially sunny' : 'In the shade'
+  const icon = status === 'sunny' ? '☀️' : status === 'partial' ? '🌤️' : status === 'unknown' ? '❓' : '⛅'
+  const label = status === 'sunny' ? 'In the sun' : status === 'partial' ? 'Partially sunny' : status === 'unknown' ? 'Status unavailable' : 'In the shade'
   return (
     <div style={{
       background: 'white', margin: '8px 12px', borderRadius: '14px',

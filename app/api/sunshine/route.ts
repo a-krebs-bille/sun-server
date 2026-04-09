@@ -76,18 +76,33 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ is_sunny: false, reason: 'night' })
     }
 
-    // 2. Fetch nearby buildings from Overpass
+    // 2. Fetch nearby buildings from Overpass (try multiple mirrors)
     const query = `[out:json][timeout:15];way["building"](around:${BUILDING_SEARCH_RADIUS},${lat},${lng});out geom;`
+    const OVERPASS_MIRRORS = [
+      'https://overpass-api.de/api/interpreter',
+      'https://overpass.kumi.systems/api/interpreter',
+      'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+    ]
     let buildings: any[] = []
-    try {
-      const res = await fetch('https://overpass-api.de/api/interpreter', {
-        method: 'POST',
-        body: query,
-      })
-      const data = await res.json()
-      buildings = data.elements ?? []
-    } catch {
-      return NextResponse.json({ is_sunny: true, reason: 'overpass_unavailable' })
+    let overpassOk = false
+    for (const mirror of OVERPASS_MIRRORS) {
+      try {
+        const res = await fetch(mirror, {
+          method: 'POST',
+          body: query,
+          signal: AbortSignal.timeout(10_000),
+        })
+        if (!res.ok) continue
+        const data = await res.json()
+        buildings = data.elements ?? []
+        overpassOk = true
+        break
+      } catch {
+        // try next mirror
+      }
+    }
+    if (!overpassOk) {
+      return NextResponse.json({ is_sunny: null, sun_status: 'unknown', reason: 'overpass_unavailable' })
     }
 
     // 3. Sun/shadow geometry
