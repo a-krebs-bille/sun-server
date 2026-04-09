@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Sun Server",
-  description: "Your guide to sunshine",
+  description: "Guide to sunshine",
 };
 
 export default function RootLayout({

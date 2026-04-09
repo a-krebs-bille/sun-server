@@ -246,7 +246,7 @@ export default function Home() {
 
       <div style={{ background: 'linear-gradient(135deg, #f97316 0%, #fbbf24 50%, #fde68a 100%)', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '40px 20px' }}>
         <h1 style={{ fontSize: '56px', fontWeight: '800', color: 'white', margin: '0 0 16px', lineHeight: 1.1 }}>
-          YOUR GUIDE TO SUNSHINE.
+          GUIDE TO SUNSHINE.
         </h1>
         <p style={{ fontSize: '20px', color: 'white', opacity: 0.9, maxWidth: '480px', marginBottom: '40px', lineHeight: 1.6 }}>
           Outdoor seating in the sun — near you.
