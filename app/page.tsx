@@ -177,7 +177,7 @@ export default function Home() {
           <div className="sun-map" style={{ flex: '1 1 50%', position: 'relative', minHeight: 0 }}>
             <DrawMap
               venues={filtered}
-              isOwner={isOwner}
+              isOwner={false}
               search={search}
               sunnyOnly={sunnyOnly}
               onVenueCreated={handleVenueCreated}
