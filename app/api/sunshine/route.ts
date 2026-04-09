@@ -3,7 +3,8 @@ import SunCalc from 'suncalc'
 import { point, polygon, featureCollection } from '@turf/helpers'
 import destination from '@turf/destination'
 import convex from '@turf/convex'
-import booleanIntersects from '@turf/boolean-intersects'
+import booleanPointInPolygon from '@turf/boolean-point-in-polygon'
+import center from '@turf/center'
 
 const DEFAULT_BUILDING_HEIGHT = 8 // metres, when OSM has no height tag
 const MAX_SHADOW_LENGTH = 500     // cap shadows at 500m (very low sun)
@@ -77,17 +78,17 @@ export async function POST(req: NextRequest) {
   )
   const shadowLengthKm = shadowLengthM / 1000
 
-  // 4. Build venue polygon in turf format (convert from Leaflet [lat,lng] to GeoJSON [lng,lat])
+  // 4. Build venue polygon and get its centre point
+  // (convert from Leaflet [lat,lng] to GeoJSON [lng,lat])
   const venueCoords = outdoor_area.map(([vlat, vlng]) => [vlng, vlat] as [number, number])
-  // Close the ring
-  venueCoords.push(venueCoords[0])
+  venueCoords.push(venueCoords[0]) // close the ring
   const venuePolygon = polygon([venueCoords])
+  const venueCentre = center(venuePolygon)
 
-  // 5. Check each building's shadow against the venue polygon
+  // 5. Check if the venue's centre point falls inside any building's shadow
   for (const building of buildings) {
     if (!building.geometry?.length) continue
 
-    // Building vertices in [lng, lat] order
     const verts: [number, number][] = building.geometry.map(
       (g: { lat: number; lon: number }) => [g.lon, g.lat],
     )
@@ -99,7 +100,7 @@ export async function POST(req: NextRequest) {
     const shadow = buildShadowPolygon(verts, shadowBearingDeg, buildingShadowLengthKm)
     if (!shadow) continue
 
-    if (booleanIntersects(shadow, venuePolygon)) {
+    if (booleanPointInPolygon(venueCentre, shadow)) {
       return NextResponse.json({ is_sunny: false, reason: 'shadow' })
     }
   }
