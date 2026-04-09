@@ -34,21 +34,22 @@ function formatDist(km: number) {
 
 function VenueCard({ venue }: { venue: any }) {
   const [vlat, vlng] = venueCenter(venue)
+  const status = venue.sun_status ?? (venue.is_sunny ? 'sunny' : 'shaded')
+  const icon = status === 'sunny' ? '☀️' : status === 'partial' ? '🌤️' : '⛅'
+  const label = status === 'sunny' ? 'In the sun' : status === 'partial' ? 'Partially sunny' : 'In the shade'
   return (
     <div style={{
       background: 'white', margin: '8px 12px', borderRadius: '14px',
       boxShadow: '0 1px 4px rgba(0,0,0,0.08)', padding: '14px 16px',
       display: 'flex', alignItems: 'center', gap: '12px',
     }}>
-      <div style={{ fontSize: '28px', flexShrink: 0 }}>
-        {venue.sun_status === 'sunny' ? '☀️' : venue.sun_status === 'partial' ? '🌤️' : '⛅'}
-      </div>
+      <div style={{ fontSize: '28px', flexShrink: 0 }}>{icon}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 700, fontSize: '15px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {venue.name}
         </div>
         <div style={{ color: '#888', fontSize: '13px', marginTop: '2px' }}>
-          {venue.sun_status === 'sunny' ? 'In the sun' : venue.sun_status === 'partial' ? 'Partially sunny' : 'In the shade'}
+          {label}
           {venue.dist != null && ` · ${formatDist(venue.dist)}`}
         </div>
       </div>
@@ -120,12 +121,12 @@ export default function Home() {
   }
 
   const filtered = venues
-    .filter(v => v.outdoor_area && v.name.toLowerCase().includes(search.toLowerCase()) && (!sunnyOnly || v.sun_status === 'sunny' || v.sun_status === 'partial'))
-    .map(v => ({ ...v, dist: userPos ? haversineKm(userPos[0], userPos[1], ...venueCenter(v)) : null }))
+    .filter(v => v.outdoor_area && v.name.toLowerCase().includes(search.toLowerCase()) && (!sunnyOnly || v.is_sunny || v.sun_status === 'sunny' || v.sun_status === 'partial'))
+    .map(v => ({ ...v, dist: userPos ? haversineKm(userPos[0], userPos[1], ...venueCenter(v)) : null, _status: v.sun_status ?? (v.is_sunny ? 'sunny' : 'shaded') }))
     .sort((a, b) => {
       const order = { sunny: 0, partial: 1, shaded: 2 }
-      const aOrder = order[a.sun_status as keyof typeof order] ?? 2
-      const bOrder = order[b.sun_status as keyof typeof order] ?? 2
+      const aOrder = order[a._status as keyof typeof order] ?? 2
+      const bOrder = order[b._status as keyof typeof order] ?? 2
       if (aOrder !== bOrder) return aOrder - bOrder
       if (a.dist != null && b.dist != null) return a.dist - b.dist
       return 0
