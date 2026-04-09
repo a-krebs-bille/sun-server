@@ -127,14 +127,19 @@ export default function Home() {
       const { data } = await supabase.from('venues').select('*')
       if (!data) { setLoading(false); return }
 
+      // Show venues immediately — sun status loads in the background
+      setVenues(data)
+      setLoading(false)
+
       const venuesWithArea = data.filter(v => v.outdoor_area)
+      if (venuesWithArea.length === 0) return
 
       // ONE Overpass request for all venues
-      const allBuildings = venuesWithArea.length > 0 ? await fetchAllBuildings(venuesWithArea) : []
+      const allBuildings = await fetchAllBuildings(venuesWithArea)
 
-      const withSun = await Promise.all(
-        data.map(async venue => {
-          if (!venue.outdoor_area) return venue
+      // Update each venue's sun status as results come in
+      await Promise.all(
+        venuesWithArea.map(async venue => {
           try {
             const buildings = allBuildings ? buildingsNear(allBuildings, venue.lat, venue.lng) : null
             const res = await fetch('/api/sunshine', {
@@ -143,12 +148,10 @@ export default function Home() {
               body: JSON.stringify({ lat: venue.lat, lng: venue.lng, outdoor_area: venue.outdoor_area, buildings }),
             })
             const { is_sunny, sun_status } = await res.json()
-            return { ...venue, is_sunny, sun_status }
-          } catch { return venue }
+            setVenues(prev => prev.map(v => v.id === venue.id ? { ...v, is_sunny, sun_status } : v))
+          } catch { /* leave venue as-is */ }
         })
       )
-      setVenues(withSun)
-      setLoading(false)
     }
     loadVenues()
   }, [showMap])
