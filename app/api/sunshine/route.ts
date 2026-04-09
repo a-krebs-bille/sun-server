@@ -8,7 +8,8 @@ import { booleanPointInPolygon } from '@turf/boolean-point-in-polygon'
 const DEFAULT_BUILDING_HEIGHT = 15  // metres — typical 5-storey Danish city-centre building
 const MAX_SHADOW_LENGTH = 500       // cap at 500m (very low sun)
 const BUILDING_SEARCH_RADIUS = 300  // metres around venue centre
-const SHADE_THRESHOLD = 0.4         // venue is "in shade" if ≥40% of sample points are shadowed
+const PARTIAL_THRESHOLD = 0.4       // ≥40% shaded (≤60% sunshine) → partially sunny
+const SHADE_THRESHOLD = 0.7         // ≥70% shaded (≤30% sunshine) → in shade
 const GRID_SIZE = 5                 // 5×5 = up to 25 sample points across the venue
 
 // Parse height from OSM tags — tries 'height', 'building:height', then levels × 3.5m
@@ -124,11 +125,14 @@ export async function POST(req: NextRequest) {
     }
 
     const shadedFraction = shadedCount / samplePoints.length
-    const is_sunny = shadedFraction < SHADE_THRESHOLD
+    const sun_status =
+      shadedFraction < PARTIAL_THRESHOLD ? 'sunny' :
+      shadedFraction < SHADE_THRESHOLD   ? 'partial' :
+                                           'shaded'
 
     return NextResponse.json({
-      is_sunny,
-      reason: is_sunny ? 'clear' : 'shadow',
+      is_sunny: sun_status === 'sunny',
+      sun_status,
       debug: { shadedFraction: Math.round(shadedFraction * 100) + '%', sampleCount: samplePoints.length, buildingCount: buildings.length }
     })
 

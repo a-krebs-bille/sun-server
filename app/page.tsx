@@ -40,13 +40,15 @@ function VenueCard({ venue }: { venue: any }) {
       boxShadow: '0 1px 4px rgba(0,0,0,0.08)', padding: '14px 16px',
       display: 'flex', alignItems: 'center', gap: '12px',
     }}>
-      <div style={{ fontSize: '28px', flexShrink: 0 }}>{venue.is_sunny ? '☀️' : '⛅'}</div>
+      <div style={{ fontSize: '28px', flexShrink: 0 }}>
+        {venue.sun_status === 'sunny' ? '☀️' : venue.sun_status === 'partial' ? '🌤️' : '⛅'}
+      </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 700, fontSize: '15px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {venue.name}
         </div>
         <div style={{ color: '#888', fontSize: '13px', marginTop: '2px' }}>
-          {venue.is_sunny ? 'In the sun' : 'In the shade'}
+          {venue.sun_status === 'sunny' ? 'In the sun' : venue.sun_status === 'partial' ? 'Partially sunny' : 'In the shade'}
           {venue.dist != null && ` · ${formatDist(venue.dist)}`}
         </div>
       </div>
@@ -73,7 +75,7 @@ export default function Home() {
   const [userPos, setUserPos] = useState<[number, number] | null>(null)
   const [isOwner, setIsOwner] = useState(false)
   const [search, setSearch] = useState('')
-  const [sunnyOnly, setSunnyOnly] = useState(false)
+  const [sunnyOnly, setSunnyOnly] = useState(false) // includes partial
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -95,8 +97,8 @@ export default function Home() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ lat: venue.lat, lng: venue.lng, outdoor_area: venue.outdoor_area }),
             })
-            const { is_sunny } = await res.json()
-            return { ...venue, is_sunny }
+            const { is_sunny, sun_status } = await res.json()
+            return { ...venue, is_sunny, sun_status }
           } catch { return venue }
         })
       )
@@ -118,10 +120,13 @@ export default function Home() {
   }
 
   const filtered = venues
-    .filter(v => v.outdoor_area && v.name.toLowerCase().includes(search.toLowerCase()) && (!sunnyOnly || v.is_sunny))
+    .filter(v => v.outdoor_area && v.name.toLowerCase().includes(search.toLowerCase()) && (!sunnyOnly || v.sun_status === 'sunny' || v.sun_status === 'partial'))
     .map(v => ({ ...v, dist: userPos ? haversineKm(userPos[0], userPos[1], ...venueCenter(v)) : null }))
     .sort((a, b) => {
-      if (a.is_sunny !== b.is_sunny) return a.is_sunny ? -1 : 1
+      const order = { sunny: 0, partial: 1, shaded: 2 }
+      const aOrder = order[a.sun_status as keyof typeof order] ?? 2
+      const bOrder = order[b.sun_status as keyof typeof order] ?? 2
+      if (aOrder !== bOrder) return aOrder - bOrder
       if (a.dist != null && b.dist != null) return a.dist - b.dist
       return 0
     })
