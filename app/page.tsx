@@ -85,8 +85,16 @@ export default function Home() {
 
     supabase.auth.getSession().then(({ data }) => setIsOwner(!!data.session))
 
-    async function fetchBuildings(lat: number, lng: number) {
-      const query = `[out:json][timeout:15];way["building"](around:300,${lat},${lng});out geom;`
+    // Fetch ALL buildings in one bbox query covering all venues — much faster than one request per venue
+    async function fetchAllBuildings(venues: any[]): Promise<any[] | null> {
+      const lats = venues.map(v => v.lat)
+      const lngs = venues.map(v => v.lng)
+      const pad = 0.004 // ~300m padding
+      const south = Math.min(...lats) - pad
+      const north = Math.max(...lats) + pad
+      const west  = Math.min(...lngs) - pad
+      const east  = Math.max(...lngs) + pad
+      const query = `[out:json][timeout:25];way["building"](${south},${west},${north},${east});out geom;`
       const mirrors = [
         'https://overpass-api.de/api/interpreter',
         'https://overpass.kumi.systems/api/interpreter',
@@ -103,15 +111,32 @@ export default function Home() {
       return null
     }
 
+    // Filter the global building list to only those within ~300m of a venue
+    function buildingsNear(allBuildings: any[], lat: number, lng: number): any[] {
+      return allBuildings.filter(b => {
+        if (!b.geometry?.length) return false
+        const bLat = b.geometry[0].lat
+        const bLng = b.geometry[0].lon
+        const dLat = (bLat - lat) * 111000
+        const dLng = (bLng - lng) * 111000 * Math.cos(lat * Math.PI / 180)
+        return Math.sqrt(dLat * dLat + dLng * dLng) < 350
+      })
+    }
+
     async function loadVenues() {
       const { data } = await supabase.from('venues').select('*')
       if (!data) { setLoading(false); return }
+
+      const venuesWithArea = data.filter(v => v.outdoor_area)
+
+      // ONE Overpass request for all venues
+      const allBuildings = venuesWithArea.length > 0 ? await fetchAllBuildings(venuesWithArea) : []
 
       const withSun = await Promise.all(
         data.map(async venue => {
           if (!venue.outdoor_area) return venue
           try {
-            const buildings = await fetchBuildings(venue.lat, venue.lng)
+            const buildings = allBuildings ? buildingsNear(allBuildings, venue.lat, venue.lng) : null
             const res = await fetch('/api/sunshine', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
