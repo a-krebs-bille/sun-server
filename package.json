@@ -13,6 +13,8 @@
     "@supabase/ssr": "^0.9.0",
     "@supabase/supabase-js": "^2.99.3",
     "@turf/boolean-intersects": "^7.3.4",
+    "@turf/boolean-point-in-polygon": "^7.3.4",
+    "@turf/center": "^7.3.4",
     "@turf/convex": "^7.3.4",
     "@turf/destination": "^7.3.4",
     "@turf/helpers": "^7.3.4",
