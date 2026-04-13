@@ -8,27 +8,42 @@ import SunCalc from 'suncalc'
 import { destination } from '@turf/destination'
 import { convex } from '@turf/convex'
 import { point, featureCollection } from '@turf/helpers'
-import { booleanPointInPolygon } from '@turf/boolean-point-in-polygon'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type SunStatus = 'sunny' | 'partial' | 'shaded' | 'night'
-interface Venue { id: string; name: string; lat: number; lng: number; outdoor_area: [number, number][] }
+
+interface Venue {
+  id: string
+  name: string
+  lat: number
+  lng: number
+  outdoor_area?: [number, number][]
+  sun_status?: SunStatus
+  is_sunny?: boolean
+  active_offer?: string
+  profile?: Record<string, any>
+}
+
 interface Building { geometry: { lat: number; lon: number }[]; tags?: Record<string, string> }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const DEFAULT_HEIGHT  = 15
-const MAX_SHADOW_M    = 500
-const GRID_SIZE       = 5
-const PARTIAL_T       = 0.4
-const SHADE_T         = 0.7
-
+const DEFAULT_HEIGHT = 15
+const MAX_SHADOW_M   = 500
 const OVERPASS_MIRRORS = [
   'https://overpass-api.de/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
   'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
 ]
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Pin colours ─────────────────────────────────────────────────────────────
+function pinColor(status: SunStatus | undefined): [number,number,number,number] {
+  if (status === 'sunny')   return [255, 160, 30, 255]
+  if (status === 'partial') return [255, 200, 60, 255]
+  if (status === 'night')   return [80, 90, 130, 255]
+  return [150, 160, 175, 255] // shaded
+}
+
+// ─── Shadow helpers ───────────────────────────────────────────────────────────
 function parseHeight(tags: Record<string, string> = {}): number {
   const raw = tags['height'] ?? tags['building:height']
   if (raw) { const n = parseFloat(raw); if (n > 0) return n }
@@ -37,360 +52,312 @@ function parseHeight(tags: Record<string, string> = {}): number {
   return DEFAULT_HEIGHT
 }
 
-function calcShadowPolygon(
-  building: Building,
-  shadowBearingDeg: number,
-  shadowLengthKm: number
-): [number, number][] | null {
-  if (!building.geometry?.length) return null
-  const verts = building.geometry.map(g => [g.lon, g.lat] as [number, number])
+function buildShadow(b: Building, bearingDeg: number, lengthKm: number): [number,number][] | null {
+  if (!b.geometry?.length) return null
+  const verts = b.geometry.map(g => [g.lon, g.lat] as [number,number])
   const pts = verts.flatMap(([lng, lat]) => {
-    const proj = destination(point([lng, lat]), shadowLengthKm, shadowBearingDeg)
+    const proj = destination(point([lng, lat]), lengthKm, bearingDeg)
     return [point([lng, lat]), proj]
   })
   const hull = convex(featureCollection(pts))
-  return (hull?.geometry?.coordinates[0] as [number, number][]) ?? null
+  return (hull?.geometry?.coordinates[0] as [number,number][]) ?? null
 }
 
-function getSunStatus(
-  venueLeaflet: [number, number][],
-  shadows: [number, number][][]
-): SunStatus {
-  const coords = venueLeaflet.map(([lat, lng]) => [lng, lat] as [number, number])
-  const closed = [...coords, coords[0]]
-  const vPoly = { type: 'Feature' as const, geometry: { type: 'Polygon' as const, coordinates: [closed] }, properties: {} }
-  const lngs = coords.map(c => c[0])
-  const lats = coords.map(c => c[1])
-  const minLng = Math.min(...lngs), maxLng = Math.max(...lngs)
-  const minLat = Math.min(...lats), maxLat = Math.max(...lats)
-
-  let shaded = 0, total = 0
-  for (let i = 0; i < GRID_SIZE; i++) {
-    for (let j = 0; j < GRID_SIZE; j++) {
-      const lng = minLng + (maxLng - minLng) * (i + 0.5) / GRID_SIZE
-      const lat = minLat + (maxLat - minLat) * (j + 0.5) / GRID_SIZE
-      const p = point([lng, lat])
-      if (!booleanPointInPolygon(p, vPoly)) continue
-      total++
-      for (const s of shadows) {
-        const sPoly = { type: 'Feature' as const, geometry: { type: 'Polygon' as const, coordinates: [s] }, properties: {} }
-        if (booleanPointInPolygon(p, sPoly)) { shaded++; break }
-      }
-    }
+async function fetchBuildingsNear(lat: number, lng: number): Promise<Building[]> {
+  const pad = 0.005
+  const q = `[out:json][timeout:20];way["building"](${lat-pad},${lng-pad},${lat+pad},${lng+pad});out geom;`
+  for (const mirror of OVERPASS_MIRRORS) {
+    try {
+      const r = await fetch(mirror, { method: 'POST', body: q })
+      if (!r.ok) continue
+      const d = await r.json()
+      return d.elements ?? []
+    } catch { /* try next */ }
   }
-  if (total === 0) return 'sunny'
-  const f = shaded / total
-  return f < PARTIAL_T ? 'sunny' : f < SHADE_T ? 'partial' : 'shaded'
+  return []
 }
 
-function toMinutes(date: Date) {
-  return date.getHours() * 60 + date.getMinutes()
+function calcShadows(buildings: Building[], lat: number, lng: number): [number,number][][] {
+  const sunPos = SunCalc.getPosition(new Date(), lat, lng)
+  if (sunPos.altitude <= 0) return []
+  const sunBearing = ((sunPos.azimuth * 180 / Math.PI) + 180 + 360) % 360
+  const shadowBearing = (sunBearing + 180) % 360
+  const shadows: [number,number][][] = []
+  for (const b of buildings) {
+    const h = parseHeight(b.tags)
+    const len = Math.min(h / Math.tan(sunPos.altitude), MAX_SHADOW_M) / 1000
+    const poly = buildShadow(b, shadowBearing, len)
+    if (poly) shadows.push(poly)
+  }
+  return shadows
 }
 
-function minutesToDate(baseDate: Date, minutes: number): Date {
-  const d = new Date(baseDate)
-  d.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0)
-  return d
+// ─── Venue detail panel ───────────────────────────────────────────────────────
+function VenuePanel({
+  venue, status, isFav, onToggleFav, userId, onClose,
+}: {
+  venue: Venue; status: SunStatus; isFav: boolean
+  onToggleFav: (id: string) => void; userId: string | null; onClose: () => void
+}) {
+  const statusLabel = status === 'sunny' ? '☀️ In the sun' : status === 'partial' ? '🌤️ Partially sunny' : status === 'night' ? '🌙 Night' : '⛅ In the shade'
+  const statusColor = status === 'sunny' ? '#f97316' : status === 'partial' ? '#ca8a04' : '#6b7280'
+
+  const profile = venue.profile ?? {}
+  const knownFields = ['description', 'price_range', 'outdoor_seats', 'menu_url', 'opening_hours']
+  const custom: { label: string; value: string }[] = profile.custom ?? []
+
+  const [vlat, vlng] = venue.outdoor_area?.length
+    ? [
+        venue.outdoor_area.reduce((s, c) => s + c[0], 0) / venue.outdoor_area.length,
+        venue.outdoor_area.reduce((s, c) => s + c[1], 0) / venue.outdoor_area.length,
+      ]
+    : [venue.lat, venue.lng]
+
+  return (
+    <div style={{
+      position: 'absolute', bottom: 0, left: 0, right: 0,
+      background: 'white', borderRadius: '20px 20px 0 0',
+      boxShadow: '0 -4px 24px rgba(0,0,0,0.13)',
+      padding: '0 0 env(safe-area-inset-bottom)',
+      zIndex: 20, fontFamily: 'Helvetica Neue, Helvetica, Arial, sans-serif',
+      maxHeight: '65vh', display: 'flex', flexDirection: 'column',
+    }}>
+      {/* Drag handle */}
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 4px' }}>
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: '#e5e7eb' }} />
+      </div>
+
+      <div style={{ overflowY: 'auto', padding: '0 20px 24px' }}>
+        {/* Header row */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.2 }}>{venue.name}</div>
+            <div style={{ fontSize: 14, color: statusColor, fontWeight: 600, marginTop: 4 }}>{statusLabel}</div>
+          </div>
+          <button
+            onClick={onClose}
+            style={{ background: '#f3f4f6', border: 'none', borderRadius: '50%', width: 32, height: 32, cursor: 'pointer', fontSize: 16, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          >×</button>
+        </div>
+
+        {/* Active offer */}
+        {venue.active_offer && (
+          <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 14 }}>
+            🏷️ <strong>Offer:</strong> {venue.active_offer}
+          </div>
+        )}
+
+        {/* Profile fields */}
+        {profile.description && (
+          <p style={{ fontSize: 14, color: '#555', lineHeight: 1.6, margin: '0 0 12px' }}>{profile.description}</p>
+        )}
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+          {profile.price_range && (
+            <span style={{ background: '#f3f4f6', borderRadius: 8, padding: '4px 10px', fontSize: 13, fontWeight: 600 }}>{profile.price_range}</span>
+          )}
+          {profile.outdoor_seats && (
+            <span style={{ background: '#f3f4f6', borderRadius: 8, padding: '4px 10px', fontSize: 13 }}>🪑 {profile.outdoor_seats} seats</span>
+          )}
+          {profile.opening_hours && (
+            <span style={{ background: '#f3f4f6', borderRadius: 8, padding: '4px 10px', fontSize: 13 }}>🕐 {profile.opening_hours}</span>
+          )}
+        </div>
+
+        {/* Custom fields */}
+        {custom.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+            {custom.map((f, i) => (
+              <div key={i} style={{ fontSize: 13, color: '#555' }}>
+                <strong>{f.label}:</strong> {f.value}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Menu link */}
+        {profile.menu_url && (
+          <a href={profile.menu_url} target="_blank" rel="noopener noreferrer"
+            style={{ display: 'inline-block', color: '#f97316', fontSize: 13, fontWeight: 600, textDecoration: 'none', marginBottom: 16 }}>
+            View menu →
+          </a>
+        )}
+
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+          <a
+            href={`https://www.google.com/maps/dir/?api=1&destination=${vlat},${vlng}`}
+            target="_blank" rel="noopener noreferrer"
+            style={{ flex: 1, background: '#f97316', color: 'white', padding: '12px', borderRadius: 12, textDecoration: 'none', fontSize: 14, fontWeight: 700, textAlign: 'center' }}
+          >
+            Directions
+          </a>
+          <button
+            onClick={() => onToggleFav(venue.id)}
+            title={userId ? (isFav ? 'Remove favourite' : 'Save as favourite') : 'Sign in to save'}
+            style={{ background: '#f3f4f6', border: 'none', borderRadius: 12, width: 50, fontSize: 22, cursor: 'pointer', opacity: userId ? 1 : 0.5 }}
+          >
+            {isFav ? '❤️' : '🤍'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
-function formatTime(minutes: number): string {
-  const h = Math.floor(minutes / 60).toString().padStart(2, '0')
-  const m = (minutes % 60).toString().padStart(2, '0')
-  return `${h}:${m}`
-}
-
-// ─── Main Component ───────────────────────────────────────────────────────────
+// ─── Main component ───────────────────────────────────────────────────────────
 interface Props {
   venues: Venue[]
   centerLat?: number
   centerLng?: number
+  isCloudy?: boolean
+  favorites?: Set<string>
+  onToggleFav?: (id: string) => void
+  userId?: string | null
 }
 
-export default function ShadowMapView({ venues, centerLat = 56.15, centerLng = 10.21 }: Props) {
-  const [buildings, setBuildings] = useState<Building[]>([])
-  const [loadingBuildings, setLoadingBuildings] = useState(true)
-  const [timeMinutes, setTimeMinutes] = useState(() => toMinutes(new Date()))
-  const [isDragging, setIsDragging] = useState(false)
+export default function ShadowMapView({
+  venues, centerLat = 56.15, centerLng = 10.21,
+  isCloudy = false, favorites = new Set(), onToggleFav = () => {}, userId = null,
+}: Props) {
+  const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null)
+  const [venueBuildings, setVenueBuildings] = useState<Building[]>([])
+  const [loadingBuildings, setLoadingBuildings] = useState(false)
 
-  const today = useMemo(() => new Date(), [])
-
-  // Sunrise / sunset for slider range
-  const { sunriseMin, sunsetMin } = useMemo(() => {
-    const times = SunCalc.getTimes(today, centerLat, centerLng)
-    return {
-      sunriseMin: toMinutes(times.sunrise),
-      sunsetMin: toMinutes(times.sunset),
-    }
-  }, [today, centerLat, centerLng])
-
-  // Fetch all buildings once for the whole area
+  // Fetch buildings when a venue is selected
   useEffect(() => {
-    if (venues.length === 0) { setLoadingBuildings(false); return }
-    const lats = venues.map(v => v.lat)
-    const lngs = venues.map(v => v.lng)
-    const pad = 0.005
-    const s = Math.min(...lats) - pad, n = Math.max(...lats) + pad
-    const w = Math.min(...lngs) - pad, e = Math.max(...lngs) + pad
-    const query = `[out:json][timeout:25];way["building"](${s},${w},${n},${e});out geom;`
-
-    async function fetchBuildings() {
-      for (const mirror of OVERPASS_MIRRORS) {
-        try {
-          const res = await fetch(mirror, { method: 'POST', body: query })
-          if (!res.ok) continue
-          const data = await res.json()
-          setBuildings(data.elements ?? [])
-          break
-        } catch { /* try next */ }
-      }
+    if (!selectedVenue?.outdoor_area) return
+    setVenueBuildings([])
+    setLoadingBuildings(true)
+    fetchBuildingsNear(selectedVenue.lat, selectedVenue.lng).then(b => {
+      setVenueBuildings(b)
       setLoadingBuildings(false)
-    }
-    fetchBuildings()
-  }, [venues])
+    })
+  }, [selectedVenue?.id])
 
-  // Recalculate shadows + venue status whenever time changes
-  const { shadowPolygons, venueStatuses } = useMemo(() => {
-    const date = minutesToDate(today, timeMinutes)
-    const sunPos = SunCalc.getPosition(date, centerLat, centerLng)
+  // Shadow polygons for the selected venue
+  const shadowPolygons = useMemo(() => {
+    if (!selectedVenue || isCloudy) return []
+    return calcShadows(venueBuildings, selectedVenue.lat, selectedVenue.lng)
+  }, [venueBuildings, selectedVenue, isCloudy])
 
-    if (sunPos.altitude <= 0) {
-      return { shadowPolygons: [], venueStatuses: venues.map(() => 'night' as SunStatus) }
-    }
+  const handlePinClick = useCallback((info: any) => {
+    if (!info.object) return
+    setSelectedVenue(info.object)
+  }, [])
 
-    const sunBearingDeg = ((sunPos.azimuth * 180 / Math.PI) + 180 + 360) % 360
-    const shadowBearingDeg = (sunBearingDeg + 180) % 360
-
-    const shadows: [number, number][][] = []
-    for (const b of buildings) {
-      const height = parseHeight(b.tags)
-      const lengthKm = Math.min(height / Math.tan(sunPos.altitude), MAX_SHADOW_M) / 1000
-      const poly = calcShadowPolygon(b, shadowBearingDeg, lengthKm)
-      if (poly) shadows.push(poly)
-    }
-
-    const statuses = venues.map(v =>
-      v.outdoor_area ? getSunStatus(v.outdoor_area, shadows) : 'sunny'
-    )
-
-    return { shadowPolygons: shadows, venueStatuses: statuses }
-  }, [timeMinutes, buildings, venues, centerLat, centerLng, today])
-
-  // deck.gl layers
-  const layers = useMemo(() => [
-    // Basemap tiles — CartoDB Positron
-    new TileLayer({
-      id: 'basemap',
-      data: 'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png',
-      minZoom: 0,
-      maxZoom: 19,
-      tileSize: 256,
-      renderSubLayers: (props: any) => new BitmapLayer(props, {
-        data: undefined,
-        image: props.data,
-        bounds: [props.tile.bbox.west, props.tile.bbox.south, props.tile.bbox.east, props.tile.bbox.north],
+  const layers = useMemo(() => {
+    const layerList: any[] = [
+      // Basemap
+      new TileLayer({
+        id: 'basemap',
+        data: 'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png',
+        minZoom: 0, maxZoom: 19, tileSize: 256,
+        renderSubLayers: (props: any) => new BitmapLayer(props, {
+          data: undefined,
+          image: props.data,
+          bounds: [props.tile.bbox.west, props.tile.bbox.south, props.tile.bbox.east, props.tile.bbox.north],
+        }),
       }),
-    }),
+    ]
 
-    // Building footprints — warm grey
-    new PolygonLayer({
-      id: 'buildings',
-      data: buildings.filter(b => b.geometry?.length >= 3),
-      getPolygon: (b: Building) => b.geometry.map(g => [g.lon, g.lat]),
-      getFillColor: [215, 210, 200, 255],
-      getLineColor: [180, 170, 160, 100],
-      lineWidthMinPixels: 0.5,
-      pickable: false,
-    }),
+    // Selected venue: shadow polygons
+    if (selectedVenue && shadowPolygons.length > 0) {
+      layerList.push(new PolygonLayer({
+        id: 'shadows',
+        data: shadowPolygons.map(c => ({ coords: c })),
+        getPolygon: (d: any) => d.coords,
+        getFillColor: [15, 20, 45, 130],
+        stroked: false,
+        pickable: false,
+      }))
+    }
 
-    // Shadow polygons — dark navy, semi-transparent
-    new PolygonLayer({
-      id: 'shadows',
-      data: shadowPolygons.map(coords => ({ coords })),
-      getPolygon: (d: { coords: [number, number][] }) => d.coords,
-      getFillColor: [15, 20, 45, 140],
-      stroked: false,
-      pickable: false,
-    }),
+    // Selected venue: outdoor area polygon
+    if (selectedVenue?.outdoor_area) {
+      layerList.push(new PolygonLayer({
+        id: 'selected-venue',
+        data: [selectedVenue],
+        getPolygon: (v: Venue) => v.outdoor_area!.map(([lat, lng]) => [lng, lat]),
+        getFillColor: (() => {
+          const s = selectedVenue.sun_status ?? (selectedVenue.is_sunny ? 'sunny' : 'shaded')
+          if (s === 'sunny')   return [255, 160, 30, 180]
+          if (s === 'partial') return [255, 200, 60, 160]
+          return [100, 120, 150, 150]
+        })(),
+        getLineColor: [255, 255, 255, 200],
+        lineWidthMinPixels: 2,
+        pickable: false,
+      }))
+    }
 
-    // Venue outdoor areas — coloured by sun status
-    new PolygonLayer({
-      id: 'venues',
-      data: venues.filter(v => v.outdoor_area),
-      getPolygon: (v: Venue) => v.outdoor_area.map(([lat, lng]) => [lng, lat]),
-      getFillColor: (v: Venue, { index }: { index: number }) => {
-        const s = venueStatuses[index]
-        if (s === 'sunny')   return [255, 160, 40, 220]
-        if (s === 'partial') return [255, 200, 80, 200]
-        if (s === 'night')   return [60, 60, 100, 180]
-        return [90, 105, 130, 200] // shaded
-      },
-      getLineColor: (v: Venue, { index }: { index: number }) => {
-        const s = venueStatuses[index]
-        if (s === 'sunny')   return [255, 130, 0, 255]
-        if (s === 'partial') return [220, 170, 0, 255]
-        if (s === 'night')   return [40, 40, 80, 200]
-        return [60, 80, 110, 255]
-      },
-      lineWidthMinPixels: 2,
-      pickable: true,
-      updateTriggers: { getFillColor: venueStatuses, getLineColor: venueStatuses },
-    }),
-
-    // Venue centre dots
-    new ScatterplotLayer({
-      id: 'venue-dots',
-      data: venues.map((v, i) => ({ ...v, status: venueStatuses[i] })),
-      getPosition: (v: any) => [v.lng, v.lat],
-      getRadius: 6,
+    // All venue pins
+    layerList.push(new ScatterplotLayer({
+      id: 'pins',
+      data: venues,
+      getPosition: (v: Venue) => [v.lng, v.lat],
+      getRadius: (v: Venue) => v.id === selectedVenue?.id ? 10 : 7,
       radiusUnits: 'pixels',
-      getFillColor: (v: any) => {
-        if (v.status === 'sunny')   return [255, 140, 20, 255]
-        if (v.status === 'partial') return [220, 180, 0, 255]
-        if (v.status === 'night')   return [60, 60, 100, 255]
-        return [80, 100, 130, 255]
+      getFillColor: (v: Venue) => {
+        const s = v.sun_status ?? (v.is_sunny ? 'sunny' : 'shaded') as SunStatus
+        return v.id === selectedVenue?.id
+          ? [255, 255, 255, 255] // white when selected
+          : pinColor(s)
       },
-      getLineColor: [255, 255, 255, 200],
-      lineWidthMinPixels: 1.5,
+      getLineColor: (v: Venue) => {
+        const s = v.sun_status ?? (v.is_sunny ? 'sunny' : 'shaded') as SunStatus
+        return pinColor(s)
+      },
+      lineWidthMinPixels: 2.5,
       stroked: true,
       pickable: true,
-      updateTriggers: { getFillColor: venueStatuses },
-    }),
-  ], [buildings, shadowPolygons, venues, venueStatuses])
+      onClick: handlePinClick,
+      updateTriggers: { getFillColor: [selectedVenue?.id, venues], getRadius: selectedVenue?.id },
+    }))
 
-  const initialViewState = {
-    longitude: centerLng,
-    latitude: centerLat,
-    zoom: 15,
-    pitch: 0,
-    bearing: 0,
-  }
+    return layerList
+  }, [venues, selectedVenue, shadowPolygons, handlePinClick])
 
-  const isNight = timeMinutes < sunriseMin || timeMinutes > sunsetMin
-  const sliderPct = Math.round(
-    ((timeMinutes - sunriseMin) / (sunsetMin - sunriseMin)) * 100
-  )
+  const status: SunStatus = selectedVenue
+    ? (selectedVenue.sun_status ?? (selectedVenue.is_sunny ? 'sunny' : 'shaded'))
+    : 'sunny'
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       <DeckGL
-        initialViewState={initialViewState}
+        initialViewState={{ longitude: centerLng, latitude: centerLat, zoom: 15, pitch: 0, bearing: 0 }}
         controller={true}
         layers={layers}
         views={new MapView({ repeat: false })}
         style={{ background: '#f5f0e8' }}
+        onClick={(info: any) => { if (!info.object) setSelectedVenue(null) }}
+        getCursor={({ isHovering }: { isHovering: boolean }) => isHovering ? 'pointer' : 'grab'}
       />
 
-      {/* Time Slider */}
-      <div style={{
-        position: 'absolute',
-        bottom: 24,
-        left: '50%',
-        transform: 'translateX(-50%)',
-        background: 'rgba(255,255,255,0.96)',
-        backdropFilter: 'blur(8px)',
-        borderRadius: 16,
-        padding: '12px 20px',
-        boxShadow: '0 2px 16px rgba(0,0,0,0.12)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 14,
-        minWidth: 280,
-        fontFamily: 'Helvetica Neue, Helvetica, Arial, sans-serif',
-        zIndex: 10,
-      }}>
-        {/* Sun icon */}
-        <span style={{ fontSize: 18 }}>
-          {isNight ? '🌙' : timeMinutes < (sunriseMin + sunsetMin) / 2 ? '🌅' : '☀️'}
-        </span>
-
-        {/* Slider */}
-        <div style={{ flex: 1, position: 'relative' }}>
-          <div style={{
-            position: 'absolute', top: '50%', left: 0, right: 0,
-            height: 4, background: '#eee', borderRadius: 2, transform: 'translateY(-50%)',
-          }} />
-          <div style={{
-            position: 'absolute', top: '50%', left: 0,
-            width: `${Math.max(0, Math.min(100, sliderPct))}%`,
-            height: 4, background: isNight ? '#7090b0' : '#ff9a28',
-            borderRadius: 2, transform: 'translateY(-50%)',
-            transition: isDragging ? 'none' : 'width 0.1s',
-          }} />
-          <input
-            type="range"
-            min={sunriseMin - 60}
-            max={sunsetMin + 60}
-            value={timeMinutes}
-            onChange={e => setTimeMinutes(Number(e.target.value))}
-            onMouseDown={() => setIsDragging(true)}
-            onMouseUp={() => setIsDragging(false)}
-            onTouchStart={() => setIsDragging(true)}
-            onTouchEnd={() => setIsDragging(false)}
-            style={{
-              position: 'relative', width: '100%', height: 20,
-              opacity: 0, cursor: 'pointer', margin: 0, zIndex: 1,
-            }}
-          />
-        </div>
-
-        {/* Now button */}
-        <button
-          onClick={() => setTimeMinutes(toMinutes(new Date()))}
-          style={{
-            border: 'none', borderRadius: 8, padding: '4px 10px',
-            fontSize: 12, fontWeight: 600, cursor: 'pointer',
-            background: timeMinutes === toMinutes(new Date()) ? '#ff9a28' : '#f1f1f1',
-            color: timeMinutes === toMinutes(new Date()) ? 'white' : '#666',
-            flexShrink: 0, transition: 'background 0.15s',
-          }}
-        >
-          Now
-        </button>
-
-        {/* Time display */}
-        <span style={{
-          fontSize: 15, fontWeight: 600, letterSpacing: '0.02em',
-          color: isNight ? '#7090b0' : '#cc6600',
-          minWidth: 40, textAlign: 'right',
-        }}>
-          {formatTime(timeMinutes)}
-        </span>
-      </div>
-
-      {/* Loading indicator */}
+      {/* Loading indicator for buildings */}
       {loadingBuildings && (
         <div style={{
-          position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)',
+          position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)',
           background: 'rgba(255,255,255,0.95)', borderRadius: 20,
-          padding: '6px 16px', fontSize: 12, fontFamily: 'Helvetica Neue, Helvetica, Arial, sans-serif',
+          padding: '6px 16px', fontSize: 12,
+          fontFamily: 'Helvetica Neue, Helvetica, Arial, sans-serif',
           color: '#666', boxShadow: '0 1px 8px rgba(0,0,0,0.1)', zIndex: 10,
         }}>
-          Loading buildings…
+          Loading shadows…
         </div>
       )}
 
-      {/* Legend */}
-      <div style={{
-        position: 'absolute', top: 16, right: 16,
-        background: 'rgba(255,255,255,0.95)',
-        backdropFilter: 'blur(8px)',
-        borderRadius: 12, padding: '10px 14px',
-        boxShadow: '0 1px 8px rgba(0,0,0,0.1)',
-        fontFamily: 'Helvetica Neue, Helvetica, Arial, sans-serif',
-        fontSize: 12, zIndex: 10,
-        display: 'flex', flexDirection: 'column', gap: 6,
-      }}>
-        {[
-          { color: '#ff9a28', label: 'In the sun' },
-          { color: '#ffc840', label: 'Partially sunny' },
-          { color: '#5a6982', label: 'In the shade' },
-        ].map(({ color, label }) => (
-          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 12, height: 12, borderRadius: 3, background: color, flexShrink: 0 }} />
-            <span style={{ color: '#333' }}>{label}</span>
-          </div>
-        ))}
-      </div>
+      {/* Venue detail panel */}
+      {selectedVenue && (
+        <VenuePanel
+          venue={selectedVenue}
+          status={status}
+          isFav={favorites.has(selectedVenue.id)}
+          onToggleFav={onToggleFav}
+          userId={userId}
+          onClose={() => setSelectedVenue(null)}
+        />
+      )}
     </div>
   )
 }

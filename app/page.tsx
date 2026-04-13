@@ -374,6 +374,10 @@ export default function Home() {
               venues={venues.filter(v => v.outdoor_area)}
               centerLat={userPos ? userPos[0] : 56.15}
               centerLng={userPos ? userPos[1] : 10.21}
+              isCloudy={isCloudy}
+              favorites={favorites}
+              onToggleFav={toggleFavorite}
+              userId={userId}
             />
           </div>
 

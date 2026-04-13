@@ -67,6 +67,18 @@ export default function Dashboard() {
           </Link>
         </div>
 
+        {/* Venue profile card */}
+        <div style={{ background: 'white', borderRadius: '16px', padding: '28px', flex: '1', minWidth: '240px', boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
+          <div style={{ fontSize: '36px', marginBottom: '12px' }}>✏️</div>
+          <h2 style={{ fontSize: '18px', fontWeight: 700, margin: '0 0 8px' }}>Venue profile</h2>
+          <p style={{ color: '#666', fontSize: '14px', lineHeight: 1.5, margin: '0 0 20px' }}>
+            Add description, opening hours, price range and custom info shown to users.
+          </p>
+          <Link href="/dashboard/venue" style={{ display: 'inline-block', background: '#f1f5f9', color: '#333', padding: '10px 22px', borderRadius: '8px', textDecoration: 'none', fontSize: '14px', fontWeight: 600 }}>
+            Edit profile
+          </Link>
+        </div>
+
         {/* Send offer card */}
         <div style={{ background: 'white', borderRadius: '16px', padding: '28px', flex: '1', minWidth: '240px', boxShadow: '0 1px 4px rgba(0,0,0,0.07)', position: 'relative', overflow: 'hidden' }}>
           <div style={{ position: 'absolute', top: '12px', right: '12px', background: '#f97316', color: 'white', fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '999px', letterSpacing: '0.05em' }}>PRO</div>
