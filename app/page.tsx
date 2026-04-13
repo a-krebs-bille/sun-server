@@ -33,7 +33,9 @@ function formatDist(km: number) {
 
 // ── Venue card ────────────────────────────────────────────────────────────────
 
-function VenueCard({ venue, cloudy }: { venue: any; cloudy: boolean }) {
+function VenueCard({ venue, cloudy, isFav, onToggleFav, userId }: {
+  venue: any; cloudy: boolean; isFav: boolean; onToggleFav: (id: string) => void; userId: string | null
+}) {
   const [vlat, vlng] = venueCenter(venue)
   const status = cloudy ? 'cloudy' : (venue.sun_status ?? (venue.is_sunny ? 'sunny' : 'shaded'))
   const icon = status === 'sunny' ? '☀️' : status === 'partial' ? '🌤️' : status === 'cloudy' ? '☁️' : status === 'unknown' ? '❓' : '⛅'
@@ -46,14 +48,34 @@ function VenueCard({ venue, cloudy }: { venue: any; cloudy: boolean }) {
     }}>
       <div style={{ fontSize: '28px', flexShrink: 0 }}>{icon}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 700, fontSize: '15px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {venue.name}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span style={{ fontWeight: 700, fontSize: '15px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {venue.name}
+          </span>
+          {venue.active_offer && (
+            <span title={venue.active_offer} style={{ fontSize: '14px', cursor: 'default' }}>🏷️</span>
+          )}
         </div>
         <div style={{ color: '#888', fontSize: '13px', marginTop: '2px' }}>
           {label}
           {venue.dist != null && ` · ${formatDist(venue.dist)}`}
+          {venue.active_offer && (
+            <span style={{ color: '#f97316', marginLeft: '6px', fontWeight: 500 }}>{venue.active_offer}</span>
+          )}
         </div>
       </div>
+      {/* Heart button */}
+      <button
+        onClick={() => onToggleFav(venue.id)}
+        title={userId ? (isFav ? 'Remove favourite' : 'Save as favourite') : 'Sign in to save favourites'}
+        style={{
+          background: 'none', border: 'none', cursor: 'pointer',
+          fontSize: '20px', padding: '4px', flexShrink: 0,
+          opacity: userId ? 1 : 0.4,
+        }}
+      >
+        {isFav ? '❤️' : '🤍'}
+      </button>
       <a
         href={`https://www.google.com/maps/dir/?api=1&destination=${vlat},${vlng}`}
         target="_blank" rel="noopener noreferrer"
@@ -77,15 +99,39 @@ export default function Home() {
   const [userPos, setUserPos] = useState<[number, number] | null>(null)
   const [isOwner, setIsOwner] = useState(false)
   const [search, setSearch] = useState('')
-  const [sunnyOnly, setSunnyOnly] = useState(false) // includes partial
+  const [sunnyOnly, setSunnyOnly] = useState(false)
+  const [favsOnly, setFavsOnly] = useState(false)
   const [loading, setLoading] = useState(true)
   const [isCloudy, setIsCloudy] = useState(false)
+  const [userId, setUserId] = useState<string | null>(null)
+  const [sessionToken, setSessionToken] = useState<string | null>(null)
+  const [favorites, setFavorites] = useState<Set<string>>(new Set())
+  const [pushEnabled, setPushEnabled] = useState(false)
 
   useEffect(() => {
     if (!showMap) return
     setLoading(true)
 
-    supabase.auth.getSession().then(({ data }) => setIsOwner(!!data.session))
+    supabase.auth.getSession().then(async ({ data }) => {
+      setIsOwner(!!data.session)
+      if (data.session) {
+        setUserId(data.session.user.id)
+        setSessionToken(data.session.access_token)
+        // Load favorites
+        const res = await fetch('/api/favorites', {
+          headers: { Authorization: `Bearer ${data.session.access_token}` },
+        })
+        const json = await res.json()
+        setFavorites(new Set(json.favorites ?? []))
+        // Register service worker for push
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.register('/sw.js').then(async reg => {
+            const existing = await reg.pushManager.getSubscription()
+            if (existing) setPushEnabled(true)
+          })
+        }
+      }
+    })
 
     // Fetch ALL buildings in one bbox query covering all venues — much faster than one request per venue
     async function fetchAllBuildings(venues: any[]): Promise<any[] | null> {
@@ -174,6 +220,45 @@ export default function Home() {
     loadVenues()
   }, [showMap])
 
+  async function toggleFavorite(venueId: string) {
+    if (!sessionToken) {
+      // Prompt sign in — redirect to login
+      window.location.href = '/login'
+      return
+    }
+    // Optimistic update
+    setFavorites(prev => {
+      const next = new Set(prev)
+      if (next.has(venueId)) next.delete(venueId)
+      else next.add(venueId)
+      return next
+    })
+    await fetch('/api/favorites', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessionToken}` },
+      body: JSON.stringify({ venueId }),
+    })
+  }
+
+  async function enablePushNotifications() {
+    if (!('serviceWorker' in navigator) || !sessionToken) return
+    try {
+      const reg = await navigator.serviceWorker.ready
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
+      })
+      await fetch('/api/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessionToken}` },
+        body: JSON.stringify(sub.toJSON()),
+      })
+      setPushEnabled(true)
+    } catch (e) {
+      console.error('Push subscribe failed', e)
+    }
+  }
+
   function handleVenueCreated(venue: any) {
     fetch('/api/sunshine', {
       method: 'POST',
@@ -186,7 +271,11 @@ export default function Home() {
   }
 
   const filtered = venues
-    .filter(v => v.outdoor_area && v.name.toLowerCase().includes(search.toLowerCase()) && (!sunnyOnly || v.is_sunny || v.sun_status === 'sunny' || v.sun_status === 'partial'))
+    .filter(v => v.outdoor_area
+      && v.name.toLowerCase().includes(search.toLowerCase())
+      && (!sunnyOnly || v.is_sunny || v.sun_status === 'sunny' || v.sun_status === 'partial')
+      && (!favsOnly || favorites.has(v.id))
+    )
     .map(v => ({ ...v, dist: userPos ? haversineKm(userPos[0], userPos[1], ...venueCenter(v)) : null, _status: v.sun_status ?? (v.is_sunny ? 'sunny' : 'shaded') }))
     .sort((a, b) => {
       const order = { sunny: 0, partial: 1, shaded: 2 }
@@ -237,8 +326,32 @@ export default function Home() {
               color: sunnyOnly ? 'white' : '#555',
             }}
           >
-            ☀️ Sunny only
+            ☀️ Sunny
           </button>
+          <button
+            onClick={() => setFavsOnly(s => !s)}
+            style={{
+              border: 'none', borderRadius: '999px', padding: '6px 14px',
+              fontSize: '13px', fontWeight: 600, cursor: 'pointer', flexShrink: 0,
+              background: favsOnly ? '#ef4444' : '#f1f5f9',
+              color: favsOnly ? 'white' : '#555',
+            }}
+          >
+            ❤️ Saved
+          </button>
+          {userId && !pushEnabled && (
+            <button
+              onClick={enablePushNotifications}
+              title="Get notified when a favourite is in the sun"
+              style={{
+                border: 'none', borderRadius: '999px', padding: '6px 12px',
+                fontSize: '13px', fontWeight: 600, cursor: 'pointer', flexShrink: 0,
+                background: '#f1f5f9', color: '#555',
+              }}
+            >
+              🔔
+            </button>
+          )}
         </div>
 
         {/* Cloudy banner */}
@@ -273,7 +386,14 @@ export default function Home() {
                 {sunnyOnly ? 'No sunny spots right now ☁️' : 'No venues found'}
               </div>
             ) : filtered.map(venue => (
-              <VenueCard key={venue.id} venue={venue} cloudy={isCloudy} />
+              <VenueCard
+                key={venue.id}
+                venue={venue}
+                cloudy={isCloudy}
+                isFav={favorites.has(venue.id)}
+                onToggleFav={toggleFavorite}
+                userId={userId}
+              />
             ))}
           </div>
         </div>
