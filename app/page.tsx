@@ -33,11 +33,11 @@ function formatDist(km: number) {
 
 // ── Venue card ────────────────────────────────────────────────────────────────
 
-function VenueCard({ venue }: { venue: any }) {
+function VenueCard({ venue, cloudy }: { venue: any; cloudy: boolean }) {
   const [vlat, vlng] = venueCenter(venue)
-  const status = venue.sun_status ?? (venue.is_sunny ? 'sunny' : 'shaded')
-  const icon = status === 'sunny' ? '☀️' : status === 'partial' ? '🌤️' : status === 'unknown' ? '❓' : '⛅'
-  const label = status === 'sunny' ? 'In the sun' : status === 'partial' ? 'Partially sunny' : status === 'unknown' ? 'Status unavailable' : 'In the shade'
+  const status = cloudy ? 'cloudy' : (venue.sun_status ?? (venue.is_sunny ? 'sunny' : 'shaded'))
+  const icon = status === 'sunny' ? '☀️' : status === 'partial' ? '🌤️' : status === 'cloudy' ? '☁️' : status === 'unknown' ? '❓' : '⛅'
+  const label = status === 'sunny' ? 'In the sun' : status === 'partial' ? 'Partially sunny' : status === 'cloudy' ? 'Cloudy' : status === 'unknown' ? 'Status unavailable' : 'In the shade'
   return (
     <div style={{
       background: 'white', margin: '8px 12px', borderRadius: '14px',
@@ -79,6 +79,7 @@ export default function Home() {
   const [search, setSearch] = useState('')
   const [sunnyOnly, setSunnyOnly] = useState(false) // includes partial
   const [loading, setLoading] = useState(true)
+  const [isCloudy, setIsCloudy] = useState(false)
 
   useEffect(() => {
     if (!showMap) return
@@ -124,6 +125,17 @@ export default function Home() {
       })
     }
 
+    async function checkCloudy(lat: number, lng: number): Promise<boolean> {
+      try {
+        const res = await fetch(
+          `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=cloud_cover&forecast_days=1`
+        )
+        const data = await res.json()
+        const cloudCover = data?.current?.cloud_cover ?? 0
+        return cloudCover >= 80 // ≥80% cloud cover = cloudy
+      } catch { return false }
+    }
+
     async function loadVenues() {
       const { data } = await supabase.from('venues').select('*')
       if (!data) { setLoading(false); return }
@@ -134,6 +146,11 @@ export default function Home() {
 
       const venuesWithArea = data.filter(v => v.outdoor_area)
       if (venuesWithArea.length === 0) return
+
+      // Check cloud cover for the area (use first venue as location proxy)
+      const cloudy = await checkCloudy(venuesWithArea[0].lat, venuesWithArea[0].lng)
+      setIsCloudy(cloudy)
+      if (cloudy) return // skip shadow calc on cloudy days
 
       // ONE Overpass request for all venues
       const allBuildings = await fetchAllBuildings(venuesWithArea)
@@ -224,6 +241,17 @@ export default function Home() {
           </button>
         </div>
 
+        {/* Cloudy banner */}
+        {isCloudy && (
+          <div style={{
+            background: '#e8edf2', color: '#445566', textAlign: 'center',
+            padding: '8px 16px', fontSize: '13px', fontWeight: 500,
+            borderBottom: '1px solid #d0d8e0', flexShrink: 0,
+          }}>
+            ☁️ It's cloudy right now — sun tracking is paused
+          </div>
+        )}
+
         {/* Body */}
         <div className="sun-body" style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
 
@@ -245,7 +273,7 @@ export default function Home() {
                 {sunnyOnly ? 'No sunny spots right now ☁️' : 'No venues found'}
               </div>
             ) : filtered.map(venue => (
-              <VenueCard key={venue.id} venue={venue} />
+              <VenueCard key={venue.id} venue={venue} cloudy={isCloudy} />
             ))}
           </div>
         </div>
