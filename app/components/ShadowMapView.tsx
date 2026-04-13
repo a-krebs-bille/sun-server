@@ -333,6 +333,20 @@ export default function ShadowMapView({ venues, centerLat = 56.15, centerLng = 1
           />
         </div>
 
+        {/* Now button */}
+        <button
+          onClick={() => setTimeMinutes(toMinutes(new Date()))}
+          style={{
+            border: 'none', borderRadius: 8, padding: '4px 10px',
+            fontSize: 12, fontWeight: 600, cursor: 'pointer',
+            background: timeMinutes === toMinutes(new Date()) ? '#ff9a28' : '#f1f1f1',
+            color: timeMinutes === toMinutes(new Date()) ? 'white' : '#666',
+            flexShrink: 0, transition: 'background 0.15s',
+          }}
+        >
+          Now
+        </button>
+
         {/* Time display */}
         <span style={{
           fontSize: 15, fontWeight: 600, letterSpacing: '0.02em',
