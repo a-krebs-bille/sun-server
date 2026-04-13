@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '../../../lib/supabase-server'
 
+const db = supabaseAdmin as any
+
 async function getUserId(req: NextRequest): Promise<string | null> {
   const token = req.headers.get('authorization')?.replace('Bearer ', '')
   if (!token) return null
@@ -16,13 +18,7 @@ export async function POST(req: NextRequest) {
   const subscription = await req.json()
   if (!subscription?.endpoint) return NextResponse.json({ error: 'Invalid subscription' }, { status: 400 })
 
-  await supabaseAdmin
-    .from('push_subscriptions')
-    .upsert(
-      { user_id: userId, subscription },
-      { onConflict: 'user_id' }
-    )
-
+  await db.from('push_subscriptions').upsert({ user_id: userId, subscription }, { onConflict: 'user_id' })
   return NextResponse.json({ ok: true })
 }
 
@@ -31,6 +27,6 @@ export async function DELETE(req: NextRequest) {
   const userId = await getUserId(req)
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  await supabaseAdmin.from('push_subscriptions').delete().eq('user_id', userId)
+  await db.from('push_subscriptions').delete().eq('user_id', userId)
   return NextResponse.json({ ok: true })
 }

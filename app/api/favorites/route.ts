@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '../../../lib/supabase-server'
 
+const db = supabaseAdmin as any
+
 async function getUserId(req: NextRequest): Promise<string | null> {
   const token = req.headers.get('authorization')?.replace('Bearer ', '')
   if (!token) return null
@@ -13,12 +15,8 @@ export async function GET(req: NextRequest) {
   const userId = await getUserId(req)
   if (!userId) return NextResponse.json({ favorites: [] })
 
-  const { data } = await supabaseAdmin
-    .from('favorites')
-    .select('venue_id')
-    .eq('user_id', userId)
-
-  return NextResponse.json({ favorites: (data ?? []).map(r => r.venue_id) })
+  const { data } = await db.from('favorites').select('venue_id').eq('user_id', userId)
+  return NextResponse.json({ favorites: (data ?? []).map((r: any) => r.venue_id) })
 }
 
 // POST /api/favorites — toggle a favourite { venueId }
@@ -29,19 +27,13 @@ export async function POST(req: NextRequest) {
   const { venueId } = await req.json()
   if (!venueId) return NextResponse.json({ error: 'Missing venueId' }, { status: 400 })
 
-  // Check if already favourited
-  const { data: existing } = await supabaseAdmin
-    .from('favorites')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('venue_id', venueId)
-    .maybeSingle()
+  const { data: existing } = await db.from('favorites').select('id').eq('user_id', userId).eq('venue_id', venueId).maybeSingle()
 
   if (existing) {
-    await supabaseAdmin.from('favorites').delete().eq('id', existing.id)
+    await db.from('favorites').delete().eq('id', existing.id)
     return NextResponse.json({ favorited: false })
   } else {
-    await supabaseAdmin.from('favorites').insert({ user_id: userId, venue_id: venueId })
+    await db.from('favorites').insert({ user_id: userId, venue_id: venueId })
     return NextResponse.json({ favorited: true })
   }
 }

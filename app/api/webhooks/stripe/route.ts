@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { supabaseAdmin } from '../../../../lib/supabase-server'
 
+const db = supabaseAdmin as any
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
 
 export async function POST(req: NextRequest) {
@@ -15,14 +16,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
   }
 
-  const sub = (event.data.object as any)
+  const sub = event.data.object as any
 
   if (
     event.type === 'customer.subscription.created' ||
     event.type === 'customer.subscription.updated' ||
     event.type === 'customer.subscription.deleted'
   ) {
-    // Get the customer's email to find the user
     const customer = await stripe.customers.retrieve(sub.customer) as Stripe.Customer
     if (!customer.email) return NextResponse.json({ ok: true })
 
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     const user = users.find(u => u.email === customer.email)
     if (!user) return NextResponse.json({ ok: true })
 
-    await supabaseAdmin.from('stripe_subscriptions').upsert({
+    await db.from('stripe_subscriptions').upsert({
       user_id: user.id,
       stripe_customer_id: sub.customer,
       stripe_sub_id: sub.id,

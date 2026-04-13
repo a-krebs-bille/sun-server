@@ -3,6 +3,7 @@ import { supabaseAdmin } from '../../../lib/supabase-server'
 import Stripe from 'stripe'
 import webpush from 'web-push'
 
+const db = supabaseAdmin as any
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
 
 webpush.setVapidDetails(
@@ -19,16 +20,9 @@ async function getUserId(req: NextRequest): Promise<string | null> {
 }
 
 async function hasProSubscription(userEmail: string): Promise<boolean> {
-  // Check Stripe for active Pro or Chain subscription
   const customers = await stripe.customers.list({ email: userEmail, limit: 1 })
   if (!customers.data.length) return false
-
-  const subs = await stripe.subscriptions.list({
-    customer: customers.data[0].id,
-    status: 'active',
-    limit: 5,
-  })
-
+  const subs = await stripe.subscriptions.list({ customer: customers.data[0].id, status: 'active', limit: 5 })
   return subs.data.some(sub =>
     sub.items.data.some(item => {
       const name = (item.price.nickname ?? '').toLowerCase()
@@ -42,7 +36,7 @@ export async function GET(req: NextRequest) {
   const venueId = req.nextUrl.searchParams.get('venue_id')
   if (!venueId) return NextResponse.json({ offers: [] })
 
-  const { data } = await supabaseAdmin
+  const { data } = await db
     .from('offers')
     .select('*')
     .eq('venue_id', venueId)
@@ -53,16 +47,14 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ offers: data ?? [] })
 }
 
-// POST /api/offers — send an offer to all users who favourited the venue
+// POST /api/offers — send an offer
 export async function POST(req: NextRequest) {
   const userId = await getUserId(req)
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // Get user email for Stripe check
   const { data: { user } } = await supabaseAdmin.auth.admin.getUserById(userId)
   if (!user?.email) return NextResponse.json({ error: 'No email on account' }, { status: 400 })
 
-  // Check Stripe subscription
   const isPro = await hasProSubscription(user.email)
   if (!isPro) {
     return NextResponse.json(
@@ -74,8 +66,7 @@ export async function POST(req: NextRequest) {
   const { venueId, title, expiresAt } = await req.json()
   if (!venueId || !title) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
 
-  // Save offer
-  const { data: offer, error } = await supabaseAdmin
+  const { data: offer, error } = await db
     .from('offers')
     .insert({ venue_id: venueId, title, expires_at: expiresAt ?? null })
     .select()
@@ -83,15 +74,9 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Get venue name
-  const { data: venue } = await supabaseAdmin
-    .from('venues')
-    .select('name')
-    .eq('id', venueId)
-    .single()
+  const { data: venue } = await db.from('venues').select('name').eq('id', venueId).single()
 
-  // Push to all users who favourited this venue
-  const { data: favs } = await supabaseAdmin
+  const { data: favs } = await db
     .from('favorites')
     .select('user_id, push_subscriptions!inner(subscription)')
     .eq('venue_id', venueId)
@@ -103,7 +88,7 @@ export async function POST(req: NextRequest) {
   })
 
   let sent = 0
-  for (const fav of (favs ?? []) as any[]) {
+  for (const fav of (favs ?? [])) {
     const sub = fav.push_subscriptions?.subscription
     if (!sub) continue
     try {
@@ -111,7 +96,7 @@ export async function POST(req: NextRequest) {
       sent++
     } catch (err: any) {
       if (err.statusCode === 410) {
-        await supabaseAdmin.from('push_subscriptions').delete().eq('user_id', fav.user_id)
+        await db.from('push_subscriptions').delete().eq('user_id', fav.user_id)
       }
     }
   }
