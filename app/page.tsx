@@ -372,8 +372,8 @@ export default function Home() {
           <div className="sun-map" style={{ flex: '1 1 50%', position: 'relative', minHeight: 0 }}>
             <ShadowMapView
               venues={venues.filter(v => v.outdoor_area)}
-              centerLat={userPos ? userPos[0] : 56.15}
-              centerLng={userPos ? userPos[1] : 10.21}
+              centerLat={userPos ? userPos[0] : 56.1572}
+              centerLng={userPos ? userPos[1] : 10.2107}
               isCloudy={isCloudy}
               favorites={favorites}
               onToggleFav={toggleFavorite}

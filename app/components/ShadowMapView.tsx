@@ -299,12 +299,13 @@ export default function ShadowMapView({
       getRadius: (v: Venue) => v.id === selectedVenue?.id ? 10 : 7,
       radiusUnits: 'pixels',
       getFillColor: (v: Venue) => {
+        if (v.id === selectedVenue?.id) return [255, 255, 255, 255]
+        if (isCloudy) return [160, 170, 185, 255]
         const s = v.sun_status ?? (v.is_sunny ? 'sunny' : 'shaded') as SunStatus
-        return v.id === selectedVenue?.id
-          ? [255, 255, 255, 255] // white when selected
-          : pinColor(s)
+        return pinColor(s)
       },
       getLineColor: (v: Venue) => {
+        if (isCloudy) return [130, 140, 155, 255]
         const s = v.sun_status ?? (v.is_sunny ? 'sunny' : 'shaded') as SunStatus
         return pinColor(s)
       },
@@ -312,7 +313,7 @@ export default function ShadowMapView({
       stroked: true,
       pickable: true,
       onClick: handlePinClick,
-      updateTriggers: { getFillColor: [selectedVenue?.id, venues], getRadius: selectedVenue?.id },
+      updateTriggers: { getFillColor: [selectedVenue?.id, venues, isCloudy], getRadius: selectedVenue?.id, getLineColor: isCloudy },
     }))
 
     return layerList
@@ -325,7 +326,7 @@ export default function ShadowMapView({
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       <DeckGL
-        initialViewState={{ longitude: centerLng, latitude: centerLat, zoom: 15, pitch: 0, bearing: 0 }}
+        initialViewState={{ longitude: centerLng, latitude: centerLat, zoom: 14, pitch: 0, bearing: 0 }}
         controller={true}
         layers={layers}
         views={new MapView({ repeat: false })}
