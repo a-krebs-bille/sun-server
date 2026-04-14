@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState, useMemo, useCallback } from 'react'
+import { Sun, CloudSun, Cloud, Moon, Heart, Tag, Clock, Armchair } from 'lucide-react'
 import DeckGL from '@deck.gl/react'
 import { TileLayer } from '@deck.gl/geo-layers'
 import { BitmapLayer, PolygonLayer, ScatterplotLayer } from '@deck.gl/layers'
@@ -99,11 +100,11 @@ function VenuePanel({
   venue: Venue; status: SunStatus; isFav: boolean
   onToggleFav: (id: string) => void; userId: string | null; onClose: () => void
 }) {
-  const statusLabel = status === 'sunny' ? '☀️ In the sun' : status === 'partial' ? '🌤️ Partially sunny' : status === 'night' ? '🌙 Night' : '⛅ In the shade'
   const statusColor = status === 'sunny' ? '#f97316' : status === 'partial' ? '#ca8a04' : '#6b7280'
+  const StatusIcon = status === 'sunny' ? Sun : status === 'partial' ? CloudSun : status === 'night' ? Moon : Cloud
+  const statusLabel = status === 'sunny' ? 'In the sun' : status === 'partial' ? 'Partially sunny' : status === 'night' ? 'Night' : 'In the shade'
 
   const profile = venue.profile ?? {}
-  const knownFields = ['description', 'price_range', 'outdoor_seats', 'menu_url', 'opening_hours']
   const custom: { label: string; value: string }[] = profile.custom ?? []
 
   const [vlat, vlng] = venue.outdoor_area?.length
@@ -132,18 +133,23 @@ function VenuePanel({
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.2 }}>{venue.name}</div>
-            <div style={{ fontSize: 14, color: statusColor, fontWeight: 600, marginTop: 4 }}>{statusLabel}</div>
+            <div style={{ fontSize: 14, color: statusColor, fontWeight: 600, marginTop: 4, display: 'flex', alignItems: 'center', gap: 5 }}>
+              <StatusIcon size={14} strokeWidth={2} /> {statusLabel}
+            </div>
           </div>
           <button
             onClick={onClose}
-            style={{ background: '#f3f4f6', border: 'none', borderRadius: '50%', width: 32, height: 32, cursor: 'pointer', fontSize: 16, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          >×</button>
+            style={{ background: '#f3f4f6', border: 'none', borderRadius: '50%', width: 32, height: 32, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666' }}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 1l12 12M13 1L1 13"/></svg>
+          </button>
         </div>
 
         {/* Active offer */}
         {venue.active_offer && (
-          <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 14 }}>
-            🏷️ <strong>Offer:</strong> {venue.active_offer}
+          <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 14, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+            <Tag size={14} color="#f97316" strokeWidth={2} style={{ flexShrink: 0, marginTop: 2 }} />
+            <span><strong>Offer:</strong> {venue.active_offer}</span>
           </div>
         )}
 
@@ -157,10 +163,14 @@ function VenuePanel({
             <span style={{ background: '#f3f4f6', borderRadius: 8, padding: '4px 10px', fontSize: 13, fontWeight: 600 }}>{profile.price_range}</span>
           )}
           {profile.outdoor_seats && (
-            <span style={{ background: '#f3f4f6', borderRadius: 8, padding: '4px 10px', fontSize: 13 }}>🪑 {profile.outdoor_seats} seats</span>
+            <span style={{ background: '#f3f4f6', borderRadius: 8, padding: '4px 10px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 5 }}>
+              <Armchair size={13} strokeWidth={2} /> {profile.outdoor_seats} seats
+            </span>
           )}
           {profile.opening_hours && (
-            <span style={{ background: '#f3f4f6', borderRadius: 8, padding: '4px 10px', fontSize: 13 }}>🕐 {profile.opening_hours}</span>
+            <span style={{ background: '#f3f4f6', borderRadius: 8, padding: '4px 10px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 5 }}>
+              <Clock size={13} strokeWidth={2} /> {profile.opening_hours}
+            </span>
           )}
         </div>
 
@@ -179,7 +189,7 @@ function VenuePanel({
         {profile.menu_url && (
           <a href={profile.menu_url} target="_blank" rel="noopener noreferrer"
             style={{ display: 'inline-block', color: '#f97316', fontSize: 13, fontWeight: 600, textDecoration: 'none', marginBottom: 16 }}>
-            View menu →
+            View menu
           </a>
         )}
 
@@ -195,9 +205,9 @@ function VenuePanel({
           <button
             onClick={() => onToggleFav(venue.id)}
             title={userId ? (isFav ? 'Remove favourite' : 'Save as favourite') : 'Sign in to save'}
-            style={{ background: '#f3f4f6', border: 'none', borderRadius: 12, width: 50, fontSize: 22, cursor: 'pointer', opacity: userId ? 1 : 0.5 }}
+            style={{ background: '#f3f4f6', border: 'none', borderRadius: 12, width: 50, cursor: 'pointer', opacity: userId ? 1 : 0.5, display: 'flex', alignItems: 'center', justifyContent: 'center', color: isFav ? '#ef4444' : '#9ca3af' }}
           >
-            {isFav ? '❤️' : '🤍'}
+            <Heart size={20} strokeWidth={2} fill={isFav ? '#ef4444' : 'none'} />
           </button>
         </div>
       </div>
