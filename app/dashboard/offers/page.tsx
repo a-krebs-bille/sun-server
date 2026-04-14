@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '../../../lib/supabase'
+import { Tag } from 'lucide-react'
 
 export default function OffersPage() {
   const router = useRouter()
@@ -148,7 +149,7 @@ export default function OffersPage() {
               fontSize: '15px', fontWeight: 700, cursor: sending || !title.trim() ? 'not-allowed' : 'pointer',
             }}
           >
-            {sending ? 'Sending…' : '🏷️ Send offer to favourited users'}
+            {sending ? 'Sending…' : 'Send offer to favourited users'}
           </button>
         </div>
       </div>

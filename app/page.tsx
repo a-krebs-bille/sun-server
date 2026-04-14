@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '../lib/supabase'
+import { Sun, CloudSun, Cloud, Heart, Tag, Bell, MapPin, Armchair, Map, Navigation } from 'lucide-react'
 
 const DrawMap = dynamic(() => import('./components/DrawMap'), { ssr: false })
 const ShadowMapView = dynamic(() => import('./components/ShadowMapView'), { ssr: false })
@@ -38,7 +39,8 @@ function VenueCard({ venue, cloudy, isFav, onToggleFav, userId }: {
 }) {
   const [vlat, vlng] = venueCenter(venue)
   const status = cloudy ? 'cloudy' : (venue.sun_status ?? (venue.is_sunny ? 'sunny' : 'shaded'))
-  const icon = status === 'sunny' ? '☀️' : status === 'partial' ? '🌤️' : status === 'cloudy' ? '☁️' : status === 'unknown' ? '❓' : '⛅'
+  const iconColor = status === 'sunny' ? '#f97316' : status === 'partial' ? '#ca8a04' : status === 'cloudy' ? '#6b90b0' : '#9ca3af'
+  const StatusIcon = status === 'sunny' ? Sun : status === 'partial' ? CloudSun : Cloud
   const label = status === 'sunny' ? 'In the sun' : status === 'partial' ? 'Partially sunny' : status === 'cloudy' ? 'Cloudy' : status === 'unknown' ? 'Status unavailable' : 'In the shade'
   return (
     <div style={{
@@ -46,14 +48,14 @@ function VenueCard({ venue, cloudy, isFav, onToggleFav, userId }: {
       boxShadow: '0 1px 4px rgba(0,0,0,0.08)', padding: '14px 16px',
       display: 'flex', alignItems: 'center', gap: '12px',
     }}>
-      <div style={{ fontSize: '28px', flexShrink: 0 }}>{icon}</div>
+      <div style={{ flexShrink: 0, color: iconColor }}><StatusIcon size={26} strokeWidth={1.8} /></div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <span style={{ fontWeight: 700, fontSize: '15px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {venue.name}
           </span>
           {venue.active_offer && (
-            <span title={venue.active_offer} style={{ fontSize: '14px', cursor: 'default' }}>🏷️</span>
+            <Tag size={13} color="#f97316" strokeWidth={2} style={{ flexShrink: 0 }} />
           )}
         </div>
         <div style={{ color: '#888', fontSize: '13px', marginTop: '2px' }}>
@@ -70,11 +72,11 @@ function VenueCard({ venue, cloudy, isFav, onToggleFav, userId }: {
         title={userId ? (isFav ? 'Remove favourite' : 'Save as favourite') : 'Sign in to save favourites'}
         style={{
           background: 'none', border: 'none', cursor: 'pointer',
-          fontSize: '20px', padding: '4px', flexShrink: 0,
-          opacity: userId ? 1 : 0.4,
+          padding: '4px', flexShrink: 0, opacity: userId ? 1 : 0.4,
+          color: isFav ? '#ef4444' : '#ccc', display: 'flex',
         }}
       >
-        {isFav ? '❤️' : '🤍'}
+        <Heart size={20} strokeWidth={2} fill={isFav ? '#ef4444' : 'none'} />
       </button>
       <a
         href={`https://www.google.com/maps/dir/?api=1&destination=${vlat},${vlng}`}
@@ -324,9 +326,10 @@ export default function Home() {
               fontSize: '13px', fontWeight: 600, cursor: 'pointer', flexShrink: 0,
               background: sunnyOnly ? '#f97316' : '#f1f5f9',
               color: sunnyOnly ? 'white' : '#555',
+              display: 'flex', alignItems: 'center', gap: '5px',
             }}
           >
-            ☀️ Sunny
+            <Sun size={14} strokeWidth={2} /> Sunny
           </button>
           <button
             onClick={() => setFavsOnly(s => !s)}
@@ -335,21 +338,23 @@ export default function Home() {
               fontSize: '13px', fontWeight: 600, cursor: 'pointer', flexShrink: 0,
               background: favsOnly ? '#ef4444' : '#f1f5f9',
               color: favsOnly ? 'white' : '#555',
+              display: 'flex', alignItems: 'center', gap: '5px',
             }}
           >
-            ❤️ Saved
+            <Heart size={14} strokeWidth={2} fill={favsOnly ? 'white' : 'none'} /> Saved
           </button>
           {userId && !pushEnabled && (
             <button
               onClick={enablePushNotifications}
               title="Get notified when a favourite is in the sun"
               style={{
-                border: 'none', borderRadius: '999px', padding: '6px 12px',
-                fontSize: '13px', fontWeight: 600, cursor: 'pointer', flexShrink: 0,
+                border: 'none', borderRadius: '999px', padding: '6px 10px',
+                cursor: 'pointer', flexShrink: 0,
                 background: '#f1f5f9', color: '#555',
+                display: 'flex', alignItems: 'center',
               }}
             >
-              🔔
+              <Bell size={15} strokeWidth={2} />
             </button>
           )}
         </div>
@@ -361,7 +366,7 @@ export default function Home() {
             padding: '8px 16px', fontSize: '13px', fontWeight: 500,
             borderBottom: '1px solid #d0d8e0', flexShrink: 0,
           }}>
-            ☁️ It's cloudy right now — sun tracking is paused
+            <Cloud size={14} strokeWidth={2} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 5 }} /> It's cloudy right now — sun tracking is paused
           </div>
         )}
 
@@ -372,8 +377,12 @@ export default function Home() {
           <div className="sun-map" style={{ flex: '1 1 50%', position: 'relative', minHeight: 0 }}>
             <ShadowMapView
               venues={venues.filter(v => v.outdoor_area)}
-              centerLat={userPos ? userPos[0] : 56.15}
-              centerLng={userPos ? userPos[1] : 10.21}
+              centerLat={userPos ? userPos[0] : 56.1572}
+              centerLng={userPos ? userPos[1] : 10.2107}
+              isCloudy={isCloudy}
+              favorites={favorites}
+              onToggleFav={toggleFavorite}
+              userId={userId}
             />
           </div>
 
@@ -411,7 +420,7 @@ export default function Home() {
       }}>
         <div style={{ fontSize: '22px', fontWeight: 'bold', color: 'white' }}>Sun Server</div>
         <div style={{ display: 'flex', gap: '16px' }}>
-          <Link href="/login" style={{ color: 'white', textDecoration: 'none', fontSize: '15px' }}>Log in</Link>
+          <Link href="/login" style={{ background: 'rgba(255,255,255,0.15)', color: 'white', padding: '8px 20px', borderRadius: '999px', textDecoration: 'none', fontSize: '15px', fontWeight: '500' }}>Log in</Link>
           <Link href="/signup" style={{ background: 'white', color: '#f97316', padding: '8px 20px', borderRadius: '999px', textDecoration: 'none', fontSize: '15px', fontWeight: '500' }}>
             List your venue
           </Link>
@@ -435,12 +444,12 @@ export default function Home() {
         <p style={{ color: '#666', fontSize: '18px', marginBottom: '60px' }}>Three steps to the perfect sunny spot</p>
         <div style={{ display: 'flex', gap: '40px', justifyContent: 'center', flexWrap: 'wrap' }}>
           {[
-            { icon: '🗺️', title: 'Find places', text: 'See all cafés and restaurants with outdoor seating on the map.' },
-            { icon: '☀️', title: 'Check the sun', text: 'See exactly which outdoor areas are in the sun right now.' },
-            { icon: '🪑', title: 'Sit down', text: 'Head straight there and enjoy the sun while it lasts.' },
+            { Icon: Map,        title: 'Find places',   text: 'See all cafés and restaurants with outdoor seating on the map.' },
+            { Icon: Sun,        title: 'Check the sun', text: 'See exactly which outdoor areas are in the sun right now.' },
+            { Icon: Navigation, title: 'Sit down',      text: 'Head straight there and enjoy the sun while it lasts.' },
           ].map(f => (
             <div key={f.title} style={{ flex: '1', minWidth: '220px', maxWidth: '260px', padding: '32px 24px', background: '#fff9f0', borderRadius: '20px', border: '2px solid #fed7aa' }}>
-              <div style={{ fontSize: '40px', marginBottom: '16px' }}>{f.icon}</div>
+              <div style={{ marginBottom: '16px', color: '#f97316' }}><f.Icon size={36} strokeWidth={1.5} /></div>
               <h3 style={{ fontSize: '17px', fontWeight: '700', margin: '0 0 8px' }}>{f.title}</h3>
               <p style={{ color: '#666', lineHeight: 1.6, fontSize: '15px', margin: 0 }}>{f.text}</p>
             </div>
