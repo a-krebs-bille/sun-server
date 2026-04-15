@@ -1,10 +1,11 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
 import { supabase } from '../lib/supabase'
-import { Sun, CloudSun, Cloud, Heart, Tag, Bell, MapPin, Armchair, Map, Navigation } from 'lucide-react'
+import { Sun, CloudSun, Cloud, Moon, Heart, Tag, Bell, MapPin, Armchair, Map, Navigation } from 'lucide-react'
+import SunCalc from 'suncalc'
 
 const DrawMap = dynamic(() => import('./components/DrawMap'), { ssr: false })
 const ShadowMapView = dynamic(() => import('./components/ShadowMapView'), { ssr: false })
@@ -297,6 +298,14 @@ export default function Home() {
       return 0
     })
 
+  // ── Night detection ───────────────────────────────────────────────────────
+
+  const isNight = useMemo(() => {
+    const lat = userPos ? userPos[0] : 56.1572
+    const lng = userPos ? userPos[1] : 10.2107
+    return SunCalc.getPosition(new Date(), lat, lng).altitude <= 0
+  }, [userPos])
+
   // ── Map view ──────────────────────────────────────────────────────────────
 
   if (showMap) {
@@ -389,7 +398,7 @@ export default function Home() {
                     <Bell size={14} strokeWidth={2} />
                   </button>
                 )}
-                {isCloudy && (
+                {isCloudy && !isNight && (
                   <div style={{
                     borderRadius: '999px', padding: '8px 16px',
                     background: 'white', color: '#445566',
@@ -432,6 +441,18 @@ export default function Home() {
               </button>
             )}
           </div>
+
+          {/* Sunset banner */}
+          {isNight && (
+            <div style={{
+              background: '#1a2744', color: 'white', flexShrink: 0,
+              padding: '14px 20px', display: 'flex', alignItems: 'center', gap: '10px',
+              fontSize: '15px', fontWeight: 500, letterSpacing: '0.01em',
+            }}>
+              <Moon size={18} strokeWidth={1.5} style={{ flexShrink: 0, opacity: 0.9 }} />
+              The sun has set — see you tomorrow
+            </div>
+          )}
 
           {/* Venue list */}
           <div className="sun-list" style={{ flex: '0 0 auto', height: '45%', overflowY: 'auto', paddingTop: '8px', paddingBottom: '8px' }}>
