@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '../../../lib/supabase'
-import { Tag } from 'lucide-react'
+import { Tag, Check } from 'lucide-react'
 
 export default function OffersPage() {
   const router = useRouter()
@@ -135,7 +135,7 @@ export default function OffersPage() {
 
           {result?.ok && (
             <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '12px 16px', marginBottom: '16px', fontSize: '14px', color: '#15803d' }}>
-              ✓ Offer sent! Your favourited customers have been notified.
+              <Check size={14} strokeWidth={2.5} style={{display:'inline',verticalAlign:'middle',marginRight:4}}/> Offer sent! Your favourited customers have been notified.
             </div>
           )}
 

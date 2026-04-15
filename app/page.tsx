@@ -99,6 +99,7 @@ export default function Home() {
   const [showMap, setShowMap] = useState(false)
   const [venues, setVenues] = useState<any[]>([])
   const [userPos, setUserPos] = useState<[number, number] | null>(null)
+  const [locateTrigger, setLocateTrigger] = useState(0)
   const [isOwner, setIsOwner] = useState(false)
   const [search, setSearch] = useState('')
   const [sunnyOnly, setSunnyOnly] = useState(false)
@@ -112,6 +113,14 @@ export default function Home() {
 
   useEffect(() => {
     if (!showMap) return
+    // Request user location
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        pos => setUserPos([pos.coords.latitude, pos.coords.longitude]),
+        () => { /* permission denied or unavailable — stay on default */ },
+        { enableHighAccuracy: true, timeout: 8000 }
+      )
+    }
     setLoading(true)
 
     supabase.auth.getSession().then(async ({ data }) => {
@@ -301,80 +310,99 @@ export default function Home() {
           }
         `}</style>
 
-        {/* Header */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '8px',
-          padding: '10px 12px', background: 'white',
-          boxShadow: '0 1px 4px rgba(0,0,0,0.08)', zIndex: 10, flexShrink: 0,
-        }}>
-          <button onClick={() => setShowMap(false)} style={{
-            border: 'none', background: 'none', cursor: 'pointer',
-            fontSize: '16px', color: '#666', padding: '6px 10px 6px 4px',
-            borderRight: '1px solid #eee', marginRight: '4px', flexShrink: 0,
-          }}>
-            ←
-          </button>
-          <input
-            type="text" placeholder="Search..."
-            value={search} onChange={e => setSearch(e.target.value)}
-            style={{ flex: 1, border: 'none', outline: 'none', fontSize: '16px', minWidth: 0 }}
-          />
-          <button
-            onClick={() => setSunnyOnly(s => !s)}
-            style={{
-              border: 'none', borderRadius: '999px', padding: '6px 14px',
-              fontSize: '13px', fontWeight: 600, cursor: 'pointer', flexShrink: 0,
-              background: sunnyOnly ? '#f97316' : '#f1f5f9',
-              color: sunnyOnly ? 'white' : '#555',
-              display: 'flex', alignItems: 'center', gap: '5px',
-            }}
-          >
-            <Sun size={14} strokeWidth={2} /> Sunny
-          </button>
-          <button
-            onClick={() => setFavsOnly(s => !s)}
-            style={{
-              border: 'none', borderRadius: '999px', padding: '6px 14px',
-              fontSize: '13px', fontWeight: 600, cursor: 'pointer', flexShrink: 0,
-              background: favsOnly ? '#ef4444' : '#f1f5f9',
-              color: favsOnly ? 'white' : '#555',
-              display: 'flex', alignItems: 'center', gap: '5px',
-            }}
-          >
-            <Heart size={14} strokeWidth={2} fill={favsOnly ? 'white' : 'none'} /> Saved
-          </button>
-          {userId && !pushEnabled && (
-            <button
-              onClick={enablePushNotifications}
-              title="Get notified when a favourite is in the sun"
-              style={{
-                border: 'none', borderRadius: '999px', padding: '6px 10px',
-                cursor: 'pointer', flexShrink: 0,
-                background: '#f1f5f9', color: '#555',
-                display: 'flex', alignItems: 'center',
-              }}
-            >
-              <Bell size={15} strokeWidth={2} />
-            </button>
-          )}
-        </div>
-
-        {/* Cloudy banner */}
-        {isCloudy && (
-          <div style={{
-            background: '#e8edf2', color: '#445566', textAlign: 'center',
-            padding: '8px 16px', fontSize: '13px', fontWeight: 500,
-            borderBottom: '1px solid #d0d8e0', flexShrink: 0,
-          }}>
-            <Cloud size={14} strokeWidth={2} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 5 }} /> It's cloudy right now — sun tracking is paused
-          </div>
-        )}
-
         {/* Body */}
         <div className="sun-body" style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
 
           {/* Map */}
           <div className="sun-map" style={{ flex: '1 1 50%', position: 'relative', minHeight: 0 }}>
+
+            {/* Floating search overlay */}
+            <div style={{ position: 'absolute', top: 16, left: 16, right: 16, zIndex: 20, display: 'flex', flexDirection: 'column', gap: '10px', pointerEvents: 'none' }}>
+
+              {/* Search pill row */}
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', pointerEvents: 'auto' }}>
+                <button
+                  onClick={() => setShowMap(false)}
+                  style={{
+                    border: 'none', borderRadius: '999px', padding: '10px 16px',
+                    background: 'white', boxShadow: '0 4px 16px rgba(0,0,0,0.13)',
+                    cursor: 'pointer', fontSize: '16px', color: '#444',
+                    flexShrink: 0, display: 'flex', alignItems: 'center',
+                  }}
+                >
+                  ←
+                </button>
+                <div style={{
+                  flex: 1, display: 'flex', alignItems: 'center', gap: '8px',
+                  background: 'white', borderRadius: '999px',
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.13)',
+                  padding: '10px 20px',
+                }}>
+                  <input
+                    type="text" placeholder="Search venues…"
+                    value={search} onChange={e => setSearch(e.target.value)}
+                    style={{ flex: 1, border: 'none', outline: 'none', fontSize: '15px', minWidth: 0, background: 'transparent', color: '#333' }}
+                  />
+                </div>
+              </div>
+
+              {/* Filter pills row */}
+              <div style={{ display: 'flex', gap: '8px', pointerEvents: 'auto' }}>
+                <button
+                  onClick={() => setSunnyOnly(s => !s)}
+                  style={{
+                    border: 'none', borderRadius: '999px', padding: '8px 16px',
+                    fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+                    background: sunnyOnly ? '#f97316' : 'white',
+                    color: sunnyOnly ? 'white' : '#555',
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
+                    display: 'flex', alignItems: 'center', gap: '5px',
+                  }}
+                >
+                  <Sun size={13} strokeWidth={2} /> Sunny
+                </button>
+                <button
+                  onClick={() => setFavsOnly(s => !s)}
+                  style={{
+                    border: 'none', borderRadius: '999px', padding: '8px 16px',
+                    fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+                    background: favsOnly ? '#ef4444' : 'white',
+                    color: favsOnly ? 'white' : '#555',
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
+                    display: 'flex', alignItems: 'center', gap: '5px',
+                  }}
+                >
+                  <Heart size={13} strokeWidth={2} fill={favsOnly ? 'white' : 'none'} /> Saved
+                </button>
+                {userId && !pushEnabled && (
+                  <button
+                    onClick={enablePushNotifications}
+                    title="Get notified when a favourite is in the sun"
+                    style={{
+                      border: 'none', borderRadius: '999px', padding: '8px 12px',
+                      cursor: 'pointer',
+                      background: 'white', color: '#555',
+                      boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
+                      display: 'flex', alignItems: 'center',
+                    }}
+                  >
+                    <Bell size={14} strokeWidth={2} />
+                  </button>
+                )}
+                {isCloudy && (
+                  <div style={{
+                    borderRadius: '999px', padding: '8px 16px',
+                    background: 'white', color: '#445566',
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
+                    fontSize: '13px', fontWeight: 500,
+                    display: 'flex', alignItems: 'center', gap: '5px',
+                  }}>
+                    <Cloud size={13} strokeWidth={2} /> Cloudy
+                  </div>
+                )}
+              </div>
+            </div>
+
             <ShadowMapView
               venues={venues.filter(v => v.outdoor_area)}
               centerLat={userPos ? userPos[0] : 56.1572}
@@ -383,7 +411,26 @@ export default function Home() {
               favorites={favorites}
               onToggleFav={toggleFavorite}
               userId={userId}
+              userPos={userPos}
+              locateTrigger={locateTrigger}
             />
+
+            {/* Locate me button */}
+            {userPos && (
+              <button
+                onClick={() => setLocateTrigger(t => t + 1)}
+                style={{
+                  position: 'absolute', bottom: 24, right: 16, zIndex: 20,
+                  background: 'white', border: 'none', borderRadius: '999px',
+                  width: 44, height: 44, cursor: 'pointer',
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.13)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: '#f97316',
+                }}
+              >
+                <Navigation size={18} strokeWidth={2} />
+              </button>
+            )}
           </div>
 
           {/* Venue list */}
