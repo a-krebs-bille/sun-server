@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '../../../lib/supabase'
+import { Check } from 'lucide-react'
 
 const SUGGESTED_FIELDS = [
   { key: 'description',   label: 'Description',     type: 'textarea', placeholder: 'A cozy spot with sun from morning to afternoon…' },
@@ -171,7 +172,7 @@ export default function VenueProfilePage() {
               transition: 'background 0.2s',
             }}
           >
-            {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save profile'}
+            {saving ? 'Saving…' : saved ? <><Check size={15} strokeWidth={2.5} style={{display:'inline',verticalAlign:'middle',marginRight:4}}/> Saved</> : 'Save profile'}
           </button>
         </div>
       </div>

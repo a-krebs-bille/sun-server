@@ -224,15 +224,29 @@ interface Props {
   favorites?: Set<string>
   onToggleFav?: (id: string) => void
   userId?: string | null
+  userPos?: [number, number] | null
+  locateTrigger?: number
 }
 
 export default function ShadowMapView({
   venues, centerLat = 56.15, centerLng = 10.21,
   isCloudy = false, favorites = new Set(), onToggleFav = () => {}, userId = null,
+  userPos = null, locateTrigger = 0,
 }: Props) {
   const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null)
   const [venueBuildings, setVenueBuildings] = useState<Building[]>([])
   const [loadingBuildings, setLoadingBuildings] = useState(false)
+  const [viewState, setViewState] = useState({
+    longitude: centerLng, latitude: centerLat, zoom: 14, pitch: 0, bearing: 0,
+    transitionDuration: 0,
+  })
+
+  // Fly to user position when locateTrigger fires
+  useEffect(() => {
+    if (locateTrigger && userPos) {
+      setViewState(v => ({ ...v, latitude: userPos[0], longitude: userPos[1], zoom: 15, transitionDuration: 800 }))
+    }
+  }, [locateTrigger])
 
   // Fetch buildings when a venue is selected
   useEffect(() => {
@@ -301,12 +315,25 @@ export default function ShadowMapView({
       }))
     }
 
+    // Glow rings for sunny/partial pins
+    layerList.push(new ScatterplotLayer({
+      id: 'pin-glow',
+      data: venues.filter(v => !isCloudy && (v.sun_status === 'sunny' || v.sun_status === 'partial' || v.is_sunny)),
+      getPosition: (v: Venue) => [v.lng, v.lat],
+      getRadius: (v: Venue) => v.sun_status === 'sunny' || v.is_sunny ? 20 : 14,
+      radiusUnits: 'pixels',
+      getFillColor: (v: Venue) => v.sun_status === 'sunny' || v.is_sunny ? [255, 150, 20, 55] : [255, 200, 60, 45],
+      stroked: false,
+      pickable: false,
+      updateTriggers: { getFillColor: [isCloudy, venues], getRadius: venues },
+    }))
+
     // All venue pins
     layerList.push(new ScatterplotLayer({
       id: 'pins',
       data: venues,
       getPosition: (v: Venue) => [v.lng, v.lat],
-      getRadius: (v: Venue) => v.id === selectedVenue?.id ? 10 : 7,
+      getRadius: (v: Venue) => v.id === selectedVenue?.id ? 11 : (v.sun_status === 'sunny' || (v.is_sunny && !v.sun_status)) ? 9 : 7,
       radiusUnits: 'pixels',
       getFillColor: (v: Venue) => {
         if (v.id === selectedVenue?.id) return [255, 255, 255, 255]
@@ -319,15 +346,42 @@ export default function ShadowMapView({
         const s = v.sun_status ?? (v.is_sunny ? 'sunny' : 'shaded') as SunStatus
         return pinColor(s)
       },
-      lineWidthMinPixels: 2.5,
+      lineWidthMinPixels: 3,
       stroked: true,
       pickable: true,
       onClick: handlePinClick,
-      updateTriggers: { getFillColor: [selectedVenue?.id, venues, isCloudy], getRadius: selectedVenue?.id, getLineColor: isCloudy },
+      updateTriggers: { getFillColor: [selectedVenue?.id, venues, isCloudy], getRadius: [selectedVenue?.id, venues], getLineColor: isCloudy },
     }))
 
+    // User location dot
+    if (userPos) {
+      layerList.push(new ScatterplotLayer({
+        id: 'user-dot',
+        data: [{ position: [userPos[1], userPos[0]] }],
+        getPosition: (d: any) => d.position,
+        getRadius: 9,
+        radiusUnits: 'pixels',
+        getFillColor: [255, 255, 255, 255],
+        getLineColor: [37, 99, 235, 255],
+        lineWidthMinPixels: 3,
+        stroked: true,
+        pickable: false,
+      }))
+      // Blue glow around user dot
+      layerList.push(new ScatterplotLayer({
+        id: 'user-dot-glow',
+        data: [{ position: [userPos[1], userPos[0]] }],
+        getPosition: (d: any) => d.position,
+        getRadius: 20,
+        radiusUnits: 'pixels',
+        getFillColor: [37, 99, 235, 40],
+        stroked: false,
+        pickable: false,
+      }))
+    }
+
     return layerList
-  }, [venues, selectedVenue, shadowPolygons, handlePinClick])
+  }, [venues, selectedVenue, shadowPolygons, handlePinClick, isCloudy, userPos])
 
   const status: SunStatus = selectedVenue
     ? (selectedVenue.sun_status ?? (selectedVenue.is_sunny ? 'sunny' : 'shaded'))
@@ -336,7 +390,8 @@ export default function ShadowMapView({
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       <DeckGL
-        initialViewState={{ longitude: centerLng, latitude: centerLat, zoom: 14, pitch: 0, bearing: 0 }}
+        viewState={viewState}
+        onViewStateChange={({ viewState: vs }: any) => setViewState(vs)}
         controller={true}
         layers={layers}
         views={new MapView({ repeat: false })}
