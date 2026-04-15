@@ -202,6 +202,9 @@ export default function Home() {
       setVenues(data)
       setLoading(false)
 
+      // Sync OSM venues once per session
+      fetch('/api/osm-import').catch(() => {})
+
       const venuesWithArea = data.filter(v => v.outdoor_area)
       if (venuesWithArea.length === 0) return
 
@@ -231,6 +234,11 @@ export default function Home() {
     }
     loadVenues()
   }, [showMap])
+
+  async function handleSaveVenueArea(venueId: string, area: [number, number][]) {
+    await supabase.from('venues').update({ outdoor_area: area }).eq('id', venueId)
+    setVenues(prev => prev.map(v => v.id === venueId ? { ...v, outdoor_area: area } : v))
+  }
 
   async function toggleFavorite(venueId: string) {
     if (!sessionToken) {
@@ -413,7 +421,7 @@ export default function Home() {
             </div>
 
             <ShadowMapView
-              venues={venues.filter(v => v.outdoor_area)}
+              venues={venues}
               centerLat={userPos ? userPos[0] : 56.1572}
               centerLng={userPos ? userPos[1] : 10.2107}
               isCloudy={isCloudy}
@@ -422,6 +430,8 @@ export default function Home() {
               userId={userId}
               userPos={userPos}
               locateTrigger={locateTrigger}
+              onSaveArea={handleSaveVenueArea}
+              isOwner={isOwner}
             />
 
             {/* Locate me button */}
