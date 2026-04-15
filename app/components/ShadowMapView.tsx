@@ -95,10 +95,11 @@ function calcShadows(buildings: Building[], lat: number, lng: number): [number,n
 
 // ─── Venue detail panel ───────────────────────────────────────────────────────
 function VenuePanel({
-  venue, status, isFav, onToggleFav, userId, onClose,
+  venue, status, isFav, onToggleFav, userId, onClose, isOwner, onDraw,
 }: {
   venue: Venue; status: SunStatus; isFav: boolean
   onToggleFav: (id: string) => void; userId: string | null; onClose: () => void
+  isOwner: boolean; onDraw: () => void
 }) {
   const statusColor = status === 'sunny' ? '#f97316' : status === 'partial' ? '#ca8a04' : '#6b7280'
   const StatusIcon = status === 'sunny' ? Sun : status === 'partial' ? CloudSun : status === 'night' ? Moon : Cloud
@@ -209,6 +210,18 @@ function VenuePanel({
           >
             <Heart size={20} strokeWidth={2} fill={isFav ? '#ef4444' : 'none'} />
           </button>
+          {isOwner && !venue.outdoor_area && (
+            <button
+              onClick={onDraw}
+              style={{
+                flex: 1, background: '#1a2744', color: 'white', border: 'none',
+                borderRadius: 12, padding: '12px', fontSize: 14, fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              Draw outdoor area
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -226,16 +239,21 @@ interface Props {
   userId?: string | null
   userPos?: [number, number] | null
   locateTrigger?: number
+  isOwner?: boolean
+  onSaveArea?: (venueId: string, area: [number, number][]) => Promise<void>
 }
 
 export default function ShadowMapView({
   venues, centerLat = 56.15, centerLng = 10.21,
   isCloudy = false, favorites = new Set(), onToggleFav = () => {}, userId = null,
-  userPos = null, locateTrigger = 0,
+  userPos = null, locateTrigger = 0, isOwner = false, onSaveArea = async () => {},
 }: Props) {
   const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null)
   const [venueBuildings, setVenueBuildings] = useState<Building[]>([])
   const [loadingBuildings, setLoadingBuildings] = useState(false)
+  const [drawingForVenue, setDrawingForVenue] = useState<Venue | null>(null)
+  const [drawPoints, setDrawPoints] = useState<[number, number][]>([]) // [lat, lng] pairs
+  const [saving, setSaving] = useState(false)
   const [viewState, setViewState] = useState({
     longitude: centerLng, latitude: centerLat, zoom: 14, pitch: 0, bearing: 0,
     transitionDuration: 0,
@@ -380,8 +398,38 @@ export default function ShadowMapView({
       }))
     }
 
+    // Drawing mode — points
+    if (drawingForVenue && drawPoints.length > 0) {
+      layerList.push(new ScatterplotLayer({
+        id: 'draw-points',
+        data: drawPoints.map(([lat, lng]) => ({ position: [lng, lat] })),
+        getPosition: (d: any) => d.position,
+        getRadius: 8,
+        radiusUnits: 'pixels',
+        getFillColor: [249, 115, 22, 255],
+        getLineColor: [255, 255, 255, 255],
+        lineWidthMinPixels: 2,
+        stroked: true,
+        pickable: false,
+      }))
+    }
+
+    // Drawing mode — polygon preview
+    if (drawingForVenue && drawPoints.length >= 3) {
+      layerList.push(new PolygonLayer({
+        id: 'draw-polygon',
+        data: [{ coords: drawPoints.map(([lat, lng]) => [lng, lat]) }],
+        getPolygon: (d: any) => d.coords,
+        getFillColor: [249, 115, 22, 60],
+        getLineColor: [249, 115, 22, 255],
+        lineWidthMinPixels: 2,
+        stroked: true,
+        pickable: false,
+      }))
+    }
+
     return layerList
-  }, [venues, selectedVenue, shadowPolygons, handlePinClick, isCloudy, userPos])
+  }, [venues, selectedVenue, shadowPolygons, handlePinClick, isCloudy, userPos, drawingForVenue, drawPoints])
 
   const status: SunStatus = selectedVenue
     ? (selectedVenue.sun_status ?? (selectedVenue.is_sunny ? 'sunny' : 'shaded'))
@@ -396,8 +444,17 @@ export default function ShadowMapView({
         layers={layers}
         views={new MapView({ repeat: false })}
         style={{ background: '#f5f0e8' }}
-        onClick={(info: any) => { if (!info.object) setSelectedVenue(null) }}
-        getCursor={({ isHovering }: { isHovering: boolean }) => isHovering ? 'pointer' : 'grab'}
+        onClick={(info: any) => {
+          if (drawingForVenue) {
+            if (info.coordinate) {
+              const [lng, lat] = info.coordinate
+              setDrawPoints(pts => [...pts, [lat, lng]])
+            }
+            return
+          }
+          if (!info.object) setSelectedVenue(null)
+        }}
+        getCursor={({ isHovering }: { isHovering: boolean }) => drawingForVenue ? 'crosshair' : isHovering ? 'pointer' : 'grab'}
       />
 
       {/* Loading indicator for buildings */}
@@ -413,6 +470,66 @@ export default function ShadowMapView({
         </div>
       )}
 
+      {/* Drawing mode toolbar */}
+      {drawingForVenue && (
+        <div style={{
+          position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 30,
+          background: '#1a2744', color: 'white',
+          padding: '16px 20px',
+          fontFamily: 'Helvetica Neue, Helvetica, Arial, sans-serif',
+        }}>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>
+            Drawing: {drawingForVenue.name}
+          </div>
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', marginBottom: 14 }}>
+            {drawPoints.length < 3
+              ? `Tap the map to add points (${drawPoints.length} so far, need 3+)`
+              : `${drawPoints.length} points — tap more or save`}
+          </div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button
+              onClick={async () => {
+                if (drawPoints.length < 3) return
+                setSaving(true)
+                await onSaveArea(drawingForVenue.id, drawPoints)
+                setSaving(false)
+                setDrawingForVenue(null)
+                setDrawPoints([])
+              }}
+              disabled={drawPoints.length < 3 || saving}
+              style={{
+                flex: 1, background: drawPoints.length >= 3 ? '#f97316' : '#334155',
+                color: 'white', border: 'none', borderRadius: 10,
+                padding: '12px', fontSize: 14, fontWeight: 700,
+                cursor: drawPoints.length >= 3 ? 'pointer' : 'not-allowed',
+              }}
+            >
+              {saving ? 'Saving…' : 'Save area'}
+            </button>
+            <button
+              onClick={() => {
+                if (drawPoints.length > 0) setDrawPoints(pts => pts.slice(0, -1))
+              }}
+              style={{
+                background: 'rgba(255,255,255,0.1)', color: 'white', border: 'none',
+                borderRadius: 10, padding: '12px 16px', fontSize: 13, cursor: 'pointer',
+              }}
+            >
+              Undo
+            </button>
+            <button
+              onClick={() => { setDrawingForVenue(null); setDrawPoints([]) }}
+              style={{
+                background: 'rgba(255,255,255,0.1)', color: 'white', border: 'none',
+                borderRadius: 10, padding: '12px 16px', fontSize: 13, cursor: 'pointer',
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Venue detail panel */}
       {selectedVenue && (
         <VenuePanel
@@ -422,6 +539,12 @@ export default function ShadowMapView({
           onToggleFav={onToggleFav}
           userId={userId}
           onClose={() => setSelectedVenue(null)}
+          isOwner={isOwner}
+          onDraw={() => {
+            setDrawingForVenue(selectedVenue)
+            setDrawPoints([])
+            setSelectedVenue(null)
+          }}
         />
       )}
     </div>
