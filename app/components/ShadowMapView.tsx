@@ -121,7 +121,7 @@ function VenuePanel({
       background: 'white', borderRadius: '20px 20px 0 0',
       boxShadow: '0 -4px 24px rgba(0,0,0,0.13)',
       padding: '0 0 env(safe-area-inset-bottom)',
-      zIndex: 20, fontFamily: 'Helvetica Neue, Helvetica, Arial, sans-serif',
+      zIndex: 20, fontFamily: "'DM Sans', Helvetica, Arial, sans-serif",
       maxHeight: '65vh', display: 'flex', flexDirection: 'column',
     }}>
       {/* Drag handle */}
@@ -463,7 +463,7 @@ export default function ShadowMapView({
           position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)',
           background: 'rgba(255,255,255,0.95)', borderRadius: 20,
           padding: '6px 16px', fontSize: 12,
-          fontFamily: 'Helvetica Neue, Helvetica, Arial, sans-serif',
+          fontFamily: "'DM Sans', Helvetica, Arial, sans-serif",
           color: '#666', boxShadow: '0 1px 8px rgba(0,0,0,0.1)', zIndex: 10,
         }}>
           Loading shadows…
@@ -476,7 +476,7 @@ export default function ShadowMapView({
           position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 30,
           background: '#1a2744', color: 'white',
           padding: '16px 20px',
-          fontFamily: 'Helvetica Neue, Helvetica, Arial, sans-serif',
+          fontFamily: "'DM Sans', Helvetica, Arial, sans-serif",
         }}>
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>
             Drawing: {drawingForVenue.name}

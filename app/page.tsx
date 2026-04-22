@@ -317,7 +317,7 @@ export default function Home() {
 
   if (showMap) {
     return (
-      <main style={{ display: 'flex', flexDirection: 'column', height: '100vh', fontFamily: 'Helvetica, Arial, sans-serif', background: '#f9f7f4' }}>
+      <main style={{ display: 'flex', flexDirection: 'column', height: '100vh', fontFamily: "'DM Sans', Helvetica, Arial, sans-serif", background: '#f9f7f4' }}>
         <style>{`
           @media (min-width: 768px) {
             .sun-body { flex-direction: row !important; }
@@ -490,7 +490,7 @@ export default function Home() {
   // ── Landing page ──────────────────────────────────────────────────────────
 
   return (
-    <main style={{ fontFamily: 'Helvetica, Arial, sans-serif', overflowX: 'hidden' }}>
+    <main style={{ fontFamily: "'DM Sans', Helvetica, Arial, sans-serif", overflowX: 'hidden' }}>
       <nav style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         padding: '20px 40px', position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
@@ -505,10 +505,10 @@ export default function Home() {
       </nav>
 
       <div style={{ background: 'linear-gradient(135deg, #f97316 0%, #fbbf24 50%, #fde68a 100%)', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '40px 20px' }}>
-        <h1 style={{ fontSize: '56px', fontWeight: '800', color: 'white', margin: '0 0 16px', lineHeight: 1.1 }}>
-          GUIDE TO SUNSHINE
+        <h1 style={{ fontSize: '64px', fontWeight: '700', color: 'white', margin: '0 0 16px', lineHeight: 1.05, fontFamily: "'Fraunces', Georgia, serif" }}>
+          Guide to Sunshine
         </h1>
-        <p style={{ fontSize: '20px', color: 'white', opacity: 0.9, maxWidth: '480px', marginBottom: '40px', lineHeight: 1.6 }}>
+        <p style={{ fontSize: '20px', color: 'white', opacity: 0.9, maxWidth: '480px', marginBottom: '40px', lineHeight: 1.6, fontFamily: "'DM Sans', Helvetica, Arial, sans-serif" }}>
           Outdoor seating in the sun — near you.
         </p>
         <button onClick={() => setShowMap(true)} style={{ background: 'white', color: '#f97316', border: 'none', padding: '18px 48px', borderRadius: '999px', fontSize: '18px', fontWeight: '700', cursor: 'pointer', boxShadow: '0 4px 20px rgba(0,0,0,0.15)' }}>
