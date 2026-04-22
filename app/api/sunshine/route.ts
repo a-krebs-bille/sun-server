@@ -67,8 +67,8 @@ export async function POST(req: NextRequest) {
     const { lat, lng, outdoor_area, buildings: clientBuildings } = body as {
       lat: number
       lng: number
-      outdoor_area: [number, number][]  // Leaflet [lat, lng]
-      buildings?: any[] | null          // pre-fetched by browser (optional)
+      outdoor_area?: [number, number][] | null  // Leaflet [lat, lng] — optional
+      buildings?: any[] | null                  // pre-fetched by browser (optional)
     }
 
     // 1. Sun position
@@ -113,7 +113,11 @@ export async function POST(req: NextRequest) {
     const shadowBearingDeg = (sunBearingDeg + 180) % 360
 
     // 4. Build venue polygon + sample points
-    const venueCoords = outdoor_area.map(([vlat, vlng]) => [vlng, vlat] as [number, number])
+    // If no outdoor_area, use a small ~20m box around the centre point
+    const area = (outdoor_area?.length >= 3)
+      ? outdoor_area
+      : (() => { const d = 0.00009; return [[lat-d,lng-d],[lat+d,lng-d],[lat+d,lng+d],[lat-d,lng+d]] as [number,number][] })()
+    const venueCoords = area.map(([vlat, vlng]) => [vlng, vlat] as [number, number])
     venueCoords.push(venueCoords[0])
     const venuePolygon = polygon([venueCoords])
     const samplePoints = sampleVenuePoints(venueCoords, venuePolygon)

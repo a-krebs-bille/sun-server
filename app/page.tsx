@@ -205,20 +205,19 @@ export default function Home() {
       // Sync OSM venues once per session
       fetch('/api/osm-import').catch(() => {})
 
-      const venuesWithArea = data.filter(v => v.outdoor_area)
-      if (venuesWithArea.length === 0) return
+      if (!data.length) return
 
       // Check cloud cover for the area (use first venue as location proxy)
-      const cloudy = await checkCloudy(venuesWithArea[0].lat, venuesWithArea[0].lng)
+      const cloudy = await checkCloudy(data[0].lat, data[0].lng)
       setIsCloudy(cloudy)
       if (cloudy) return // skip shadow calc on cloudy days
 
       // ONE Overpass request for all venues
-      const allBuildings = await fetchAllBuildings(venuesWithArea)
+      const allBuildings = await fetchAllBuildings(data)
 
       // Update each venue's sun status as results come in
       await Promise.all(
-        venuesWithArea.map(async venue => {
+        data.map(async venue => {
           try {
             const buildings = allBuildings ? buildingsNear(allBuildings, venue.lat, venue.lng) : null
             const res = await fetch('/api/sunshine', {
