@@ -5,11 +5,11 @@ import { destination } from '@turf/destination'
 import { convex } from '@turf/convex'
 import { booleanPointInPolygon } from '@turf/boolean-point-in-polygon'
 
-const DEFAULT_BUILDING_HEIGHT = 15  // metres — typical 5-storey Danish city-centre building
-const MAX_SHADOW_LENGTH = 500       // cap at 500m (very low sun)
-const BUILDING_SEARCH_RADIUS = 300  // metres around venue centre
-const PARTIAL_THRESHOLD = 0.4       // ≥40% shaded (≤60% sunshine) → partially sunny
-const SHADE_THRESHOLD = 0.7         // ≥70% shaded (≤30% sunshine) → in shade
+const DEFAULT_BUILDING_HEIGHT = 10.5 // metres — typical 3-storey Danish city-centre building
+const MAX_SHADOW_LENGTH = 500        // cap at 500m (very low sun)
+const BUILDING_SEARCH_RADIUS = 300   // metres around venue centre
+const PARTIAL_THRESHOLD = 0.6        // ≥60% shaded → partially sunny (bias towards sunny)
+const SHADE_THRESHOLD = 0.85         // ≥85% shaded → in shade (bias towards sunny)
 const GRID_SIZE = 5                 // 5×5 = up to 25 sample points across the venue
 
 // Parse height from OSM tags — tries 'height', 'building:height', then levels × 3.5m
