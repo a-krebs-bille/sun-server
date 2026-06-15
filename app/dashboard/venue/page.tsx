@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '../../../lib/supabase'
-import { Check } from 'lucide-react'
+import { Check, ArrowLeft } from 'lucide-react'
 
 const SUGGESTED_FIELDS = [
   { key: 'description',   label: 'Description',     type: 'textarea', placeholder: 'A cozy spot with sun from morning to afternoon…' },
@@ -76,7 +76,7 @@ export default function VenueProfilePage() {
     <main style={{ minHeight: '100vh', background: '#f9f7f4', fontFamily: 'Helvetica, Arial, sans-serif' }}>
       <div style={{ background: 'white', borderBottom: '1px solid #eee', padding: '20px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <Link href="/dashboard" style={{ fontSize: 13, color: '#888', textDecoration: 'none' }}>← Dashboard</Link>
+          <Link href="/dashboard" style={{ fontSize: 13, color: '#888', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><ArrowLeft size={13} strokeWidth={2} /> Dashboard</Link>
           <div style={{ fontSize: 20, fontWeight: 700, marginTop: 4 }}>Venue profile</div>
         </div>
         {venues.length > 1 && (

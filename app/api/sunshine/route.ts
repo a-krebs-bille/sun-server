@@ -114,9 +114,10 @@ export async function POST(req: NextRequest) {
 
     // 4. Build venue polygon + sample points
     // If no outdoor_area, use a small ~20m box around the centre point
-    const area = (outdoor_area?.length >= 3)
+    const d = 0.00009
+    const area: [number, number][] = (outdoor_area && outdoor_area.length >= 3)
       ? outdoor_area
-      : (() => { const d = 0.00009; return [[lat-d,lng-d],[lat+d,lng-d],[lat+d,lng+d],[lat-d,lng+d]] as [number,number][] })()
+      : [[lat - d, lng - d], [lat + d, lng - d], [lat + d, lng + d], [lat - d, lng + d]]
     const venueCoords = area.map(([vlat, vlng]) => [vlng, vlat] as [number, number])
     venueCoords.push(venueCoords[0])
     const venuePolygon = polygon([venueCoords])

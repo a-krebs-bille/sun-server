@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
     if (!favs?.length) continue
 
     const payload = JSON.stringify({
-      title: `☀️ ${venue.name} is in the sun!`,
+      title: `${venue.name} is in the sun!`,
       body: 'Your favourite spot just got sunny. Head over now.',
       url: '/',
     })

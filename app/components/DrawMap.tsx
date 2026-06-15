@@ -10,16 +10,16 @@ import L from 'leaflet'
 
 function makeIcon(status: 'sunny' | 'partial' | 'shaded') {
   if (status === 'sunny') return L.divIcon({
-    html: `<div style="width:40px;height:40px;border-radius:50%;background:#f97316;border:3px solid white;box-shadow:0 0 0 4px rgba(249,115,22,0.25),0 2px 8px rgba(249,115,22,0.5);display:flex;align-items:center;justify-content:center;font-size:20px;line-height:1;">☀️</div>`,
-    className: '', iconSize: [40, 40], iconAnchor: [20, 20],
+    html: `<div style="width:22px;height:22px;border-radius:50%;background:#f97316;border:3px solid white;box-shadow:0 0 0 4px rgba(249,115,22,0.25),0 2px 8px rgba(249,115,22,0.5);"></div>`,
+    className: '', iconSize: [22, 22], iconAnchor: [11, 11],
   })
   if (status === 'partial') return L.divIcon({
-    html: `<div style="width:38px;height:38px;border-radius:50%;background:#fbbf24;border:3px solid white;box-shadow:0 0 0 4px rgba(251,191,36,0.25),0 2px 8px rgba(251,191,36,0.4);display:flex;align-items:center;justify-content:center;font-size:19px;line-height:1;">🌤️</div>`,
-    className: '', iconSize: [38, 38], iconAnchor: [19, 19],
+    html: `<div style="width:20px;height:20px;border-radius:50%;background:#fbbf24;border:3px solid white;box-shadow:0 0 0 4px rgba(251,191,36,0.25),0 2px 8px rgba(251,191,36,0.4);"></div>`,
+    className: '', iconSize: [20, 20], iconAnchor: [10, 10],
   })
   return L.divIcon({
-    html: `<div style="width:36px;height:36px;border-radius:50%;background:#94a3b8;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.15);display:flex;align-items:center;justify-content:center;font-size:18px;line-height:1;">⛅</div>`,
-    className: '', iconSize: [36, 36], iconAnchor: [18, 18],
+    html: `<div style="width:18px;height:18px;border-radius:50%;background:#94a3b8;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.15);"></div>`,
+    className: '', iconSize: [18, 18], iconAnchor: [9, 9],
   })
 }
 
@@ -98,7 +98,7 @@ export default function DrawMap({ venues, isOwner, search, sunnyOnly, onVenueCre
       {filtered.map(venue => {
         const status: 'sunny' | 'partial' | 'shaded' = venue.sun_status ?? (venue.is_sunny ? 'sunny' : 'shaded')
         const centre = getCenter(venue.outdoor_area)
-        const statusLabel = status === 'sunny' ? '☀️ In the sun' : status === 'partial' ? '🌤️ Partially sunny' : '⛅ In the shade'
+        const statusLabel = status === 'sunny' ? 'In the sun' : status === 'partial' ? 'Partially sunny' : 'In the shade'
         const statusColor = status === 'sunny' ? '#f97316' : status === 'partial' ? '#d97706' : '#64748b'
         const statusBg = status === 'sunny' ? '#fff7ed' : status === 'partial' ? '#fffbeb' : '#f1f5f9'
         const polygonColor = status === 'sunny' ? '#f97316' : status === 'partial' ? '#fbbf24' : '#94a3b8'
