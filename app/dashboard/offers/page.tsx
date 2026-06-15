@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '../../../lib/supabase'
-import { Tag, Check } from 'lucide-react'
+import { Tag, Check, ArrowLeft, ArrowRight } from 'lucide-react'
 
 export default function OffersPage() {
   const router = useRouter()
@@ -69,7 +69,7 @@ export default function OffersPage() {
     <main style={{ minHeight: '100vh', background: '#f9f7f4', fontFamily: 'Helvetica, Arial, sans-serif' }}>
       <div style={{ background: 'white', borderBottom: '1px solid #eee', padding: '20px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <Link href="/dashboard" style={{ fontSize: '13px', color: '#888', textDecoration: 'none' }}>← Dashboard</Link>
+          <Link href="/dashboard" style={{ fontSize: '13px', color: '#888', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><ArrowLeft size={13} strokeWidth={2} /> Dashboard</Link>
           <div style={{ fontSize: '20px', fontWeight: 700, marginTop: '4px' }}>Send an offer</div>
         </div>
       </div>
@@ -127,7 +127,7 @@ export default function OffersPage() {
               {result.error}
               {result.error.includes('Pro') && (
                 <div style={{ marginTop: '8px' }}>
-                  <Link href="/pricing" style={{ color: '#f97316', fontWeight: 600, textDecoration: 'none' }}>View plans →</Link>
+                  <Link href="/pricing" style={{ color: '#f97316', fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>View plans <ArrowRight size={13} strokeWidth={2} /></Link>
                 </div>
               )}
             </div>

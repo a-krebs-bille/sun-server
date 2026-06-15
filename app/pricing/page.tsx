@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Check } from 'lucide-react'
 
 const plans = [
   {
@@ -94,8 +95,8 @@ export default function Pricing() {
             <p style={{ color: '#666', fontSize: '14px', marginBottom: '20px' }}>{plan.description}</p>
             <ul style={{ listStyle: 'none', padding: 0, marginBottom: '24px' }}>
               {plan.features.map(feature => (
-                <li key={feature} style={{ padding: '4px 0', fontSize: '14px' }}>
-                  ✓ {feature}
+                <li key={feature} style={{ padding: '4px 0', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Check size={15} strokeWidth={2.5} color="#16a34a" style={{ flexShrink: 0 }} /> {feature}
                 </li>
               ))}
             </ul>

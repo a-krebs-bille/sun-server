@@ -4,10 +4,9 @@ import dynamic from 'next/dynamic'
 import { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
 import { supabase } from '../lib/supabase'
-import { Sun, CloudSun, Cloud, Moon, Heart, Tag, Bell, MapPin, Armchair, Map, Navigation } from 'lucide-react'
+import { Sun, CloudSun, Cloud, Moon, Heart, Tag, Bell, MapPin, Armchair, Map, Navigation, ArrowLeft, Plus } from 'lucide-react'
 import SunCalc from 'suncalc'
 
-const DrawMap = dynamic(() => import('./components/DrawMap'), { ssr: false })
 const ShadowMapView = dynamic(() => import('./components/ShadowMapView'), { ssr: false })
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -239,6 +238,30 @@ export default function Home() {
     setVenues(prev => prev.map(v => v.id === venueId ? { ...v, outdoor_area: area } : v))
   }
 
+  async function handleCreateVenue(v: { name: string; lat: number; lng: number; type?: string; opening_hours?: string }) {
+    const profile: Record<string, any> = { source: 'user' }
+    if (v.type) profile.type = v.type
+    if (v.opening_hours) profile.opening_hours = v.opening_hours
+    const { data } = await supabase
+      .from('venues')
+      .insert({ name: v.name, lat: v.lat, lng: v.lng, profile })
+      .select()
+    if (data?.[0]) {
+      const created = data[0]
+      setVenues(prev => [...prev, created])
+      // Calculate sun status for the new venue in the background
+      try {
+        const res = await fetch('/api/sunshine', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lat: created.lat, lng: created.lng, outdoor_area: created.outdoor_area, buildings: null }),
+        })
+        const { is_sunny, sun_status } = await res.json()
+        setVenues(prev => prev.map(x => x.id === created.id ? { ...x, is_sunny, sun_status } : x))
+      } catch { /* leave as-is */ }
+    }
+  }
+
   async function toggleFavorite(venueId: string) {
     if (!sessionToken) {
       // Prompt sign in — redirect to login
@@ -290,8 +313,7 @@ export default function Home() {
   }
 
   const filtered = venues
-    .filter(v => v.outdoor_area
-      && v.name.toLowerCase().includes(search.toLowerCase())
+    .filter(v => v.name.toLowerCase().includes(search.toLowerCase())
       && (!sunnyOnly || v.is_sunny || v.sun_status === 'sunny' || v.sun_status === 'partial')
       && (!favsOnly || favorites.has(v.id))
     )
@@ -346,7 +368,7 @@ export default function Home() {
                     flexShrink: 0, display: 'flex', alignItems: 'center',
                   }}
                 >
-                  ←
+                  <ArrowLeft size={18} strokeWidth={2} />
                 </button>
                 <div style={{
                   flex: 1, display: 'flex', alignItems: 'center', gap: '8px',
@@ -430,6 +452,7 @@ export default function Home() {
               userPos={userPos}
               locateTrigger={locateTrigger}
               onSaveArea={handleSaveVenueArea}
+              onCreateVenue={handleCreateVenue}
               isOwner={isOwner}
             />
 
@@ -469,7 +492,7 @@ export default function Home() {
               <div style={{ textAlign: 'center', padding: '32px', color: '#aaa', fontSize: '14px' }}>Loading venues…</div>
             ) : filtered.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '32px', color: '#aaa', fontSize: '14px' }}>
-                {sunnyOnly ? 'No sunny spots right now ☁️' : 'No venues found'}
+                {sunnyOnly ? 'No sunny spots right now' : 'No venues found'}
               </div>
             ) : filtered.map(venue => (
               <VenueCard

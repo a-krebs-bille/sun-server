@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '../../../lib/supabase'
+import { ArrowLeft } from 'lucide-react'
 
 const DrawMap = dynamic(() => import('../../components/DrawMap'), { ssr: false })
 
@@ -64,11 +65,11 @@ export default function BusinessMap() {
     <main style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column', fontFamily: 'Helvetica, Arial, sans-serif' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 16px', background: 'white', boxShadow: '0 1px 4px rgba(0,0,0,0.08)', zIndex: 10, flexShrink: 0 }}>
-        <Link href="/dashboard" style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '16px', color: '#666', textDecoration: 'none', paddingRight: '12px', borderRight: '1px solid #eee' }}>
-          ← Dashboard
+        <Link href="/dashboard" style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '16px', color: '#666', textDecoration: 'none', paddingRight: '12px', borderRight: '1px solid #eee', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+          <ArrowLeft size={16} strokeWidth={2} /> Dashboard
         </Link>
         <span style={{ fontSize: '15px', fontWeight: 600 }}>Business map</span>
-        <span style={{ marginLeft: '8px', fontSize: '13px', color: '#888' }}>Draw your outdoor area using the polygon tool →</span>
+        <span style={{ marginLeft: '8px', fontSize: '13px', color: '#888' }}>Draw your outdoor area using the polygon tool</span>
       </div>
 
       {/* Map */}

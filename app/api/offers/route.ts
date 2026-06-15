@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
     .eq('venue_id', venueId)
 
   const payload = JSON.stringify({
-    title: `🏷️ ${venue?.name ?? 'A venue'} has an offer!`,
+    title: `${venue?.name ?? 'A venue'} has an offer!`,
     body: title,
     url: '/',
   })

@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState, useMemo, useCallback } from 'react'
-import { Sun, CloudSun, Cloud, Moon, Heart, Tag, Clock, Armchair } from 'lucide-react'
+import { Sun, CloudSun, Cloud, Moon, Heart, Tag, Clock, Armchair, Plus, MapPin } from 'lucide-react'
 import DeckGL from '@deck.gl/react'
 import { TileLayer } from '@deck.gl/geo-layers'
 import { BitmapLayer, PolygonLayer, ScatterplotLayer } from '@deck.gl/layers'
@@ -73,6 +73,49 @@ async function fetchBuildingsNear(lat: number, lng: number): Promise<Building[]>
       if (!r.ok) continue
       const d = await r.json()
       return d.elements ?? []
+    } catch { /* try next */ }
+  }
+  return []
+}
+
+// Public-venue lookup for user submissions — runs in the browser because
+// server-side Overpass is blocked on Vercel. A user can only add a venue that
+// already exists as a public place in OSM, which keeps out spam/private spots.
+const PUBLIC_AMENITIES = '^(cafe|restaurant|bar|pub|fast_food|biergarten|ice_cream|food_court)$'
+const AMENITY_LABELS: Record<string, string> = {
+  cafe: 'Café', restaurant: 'Restaurant', bar: 'Bar', pub: 'Pub',
+  fast_food: 'Fast food', biergarten: 'Beer garden', ice_cream: 'Ice cream', food_court: 'Food court',
+}
+
+async function fetchNearbyPublicVenues(lat: number, lng: number): Promise<NearbyVenue[]> {
+  const q =
+    `[out:json][timeout:15];(` +
+    `node["amenity"~"${PUBLIC_AMENITIES}"]["name"](around:70,${lat},${lng});` +
+    `way["amenity"~"${PUBLIC_AMENITIES}"]["name"](around:70,${lat},${lng});` +
+    `);out center;`
+  for (const mirror of OVERPASS_MIRRORS) {
+    try {
+      const r = await fetch(mirror, { method: 'POST', body: q })
+      if (!r.ok) continue
+      const d = await r.json()
+      return (d.elements ?? [])
+        .map((el: any) => {
+          const vlat = el.lat ?? el.center?.lat
+          const vlng = el.lon ?? el.center?.lon
+          if (vlat == null || vlng == null) return null
+          const amenity = el.tags?.amenity ?? ''
+          const dLat = (vlat - lat) * 111000
+          const dLng = (vlng - lng) * 111000 * Math.cos((lat * Math.PI) / 180)
+          return {
+            name: el.tags.name as string,
+            type: amenity,
+            typeLabel: AMENITY_LABELS[amenity] ?? 'Venue',
+            lat: vlat, lng: vlng,
+            dist: Math.round(Math.sqrt(dLat * dLat + dLng * dLng)),
+          } as NearbyVenue
+        })
+        .filter((v: NearbyVenue | null): v is NearbyVenue => v != null)
+        .sort((a: NearbyVenue, b: NearbyVenue) => a.dist - b.dist)
     } catch { /* try next */ }
   }
   return []
@@ -241,12 +284,17 @@ interface Props {
   locateTrigger?: number
   isOwner?: boolean
   onSaveArea?: (venueId: string, area: [number, number][]) => Promise<void>
+  onCreateVenue?: (v: { name: string; lat: number; lng: number; type?: string; opening_hours?: string }) => Promise<void>
 }
+
+// A public venue candidate returned by the OSM lookup
+interface NearbyVenue { name: string; type: string; typeLabel: string; lat: number; lng: number; dist: number }
 
 export default function ShadowMapView({
   venues, centerLat = 56.15, centerLng = 10.21,
   isCloudy = false, favorites = new Set(), onToggleFav = () => {}, userId = null,
   userPos = null, locateTrigger = 0, isOwner = false, onSaveArea = async () => {},
+  onCreateVenue = async () => {},
 }: Props) {
   const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null)
   const [venueBuildings, setVenueBuildings] = useState<Building[]>([])
@@ -254,6 +302,40 @@ export default function ShadowMapView({
   const [drawingForVenue, setDrawingForVenue] = useState<Venue | null>(null)
   const [drawPoints, setDrawPoints] = useState<[number, number][]>([]) // [lat, lng] pairs
   const [saving, setSaving] = useState(false)
+  // Add-venue flow
+  const [addMode, setAddMode] = useState(false)
+  const [pendingPoint, setPendingPoint] = useState<[number, number] | null>(null) // [lat, lng]
+  const [nearbyOptions, setNearbyOptions] = useState<NearbyVenue[] | null>(null)
+  const [loadingNearby, setLoadingNearby] = useState(false)
+  const [chosenVenue, setChosenVenue] = useState<NearbyVenue | null>(null)
+  const [openingHours, setOpeningHours] = useState('')
+  const [creating, setCreating] = useState(false)
+
+  function resetAddFlow() {
+    setAddMode(false)
+    setPendingPoint(null)
+    setNearbyOptions(null)
+    setChosenVenue(null)
+    setOpeningHours('')
+    setLoadingNearby(false)
+  }
+
+  async function handleAddTap(lat: number, lng: number) {
+    setPendingPoint([lat, lng])
+    setNearbyOptions(null)
+    setChosenVenue(null)
+    setLoadingNearby(true)
+    // Query Overpass from the browser (server-side Overpass is blocked on Vercel),
+    // so a user can only add a real public place that already exists in OSM.
+    const found = await fetchNearbyPublicVenues(lat, lng)
+    // Hide venues already on the map (match by name within ~40m)
+    const fresh = found.filter(nv =>
+      !venues.some(v => v.name.toLowerCase() === nv.name.toLowerCase()
+        && Math.abs(v.lat - nv.lat) < 0.0004 && Math.abs(v.lng - nv.lng) < 0.0004)
+    )
+    setNearbyOptions(fresh)
+    setLoadingNearby(false)
+  }
   const [viewState, setViewState] = useState({
     longitude: centerLng, latitude: centerLat, zoom: 14, pitch: 0, bearing: 0,
     transitionDuration: 0,
@@ -428,8 +510,24 @@ export default function ShadowMapView({
       }))
     }
 
+    // Add-venue mode — pending point marker
+    if (addMode && pendingPoint) {
+      layerList.push(new ScatterplotLayer({
+        id: 'pending-point',
+        data: [{ position: [pendingPoint[1], pendingPoint[0]] }],
+        getPosition: (d: any) => d.position,
+        getRadius: 9,
+        radiusUnits: 'pixels',
+        getFillColor: [26, 39, 68, 255],
+        getLineColor: [255, 255, 255, 255],
+        lineWidthMinPixels: 3,
+        stroked: true,
+        pickable: false,
+      }))
+    }
+
     return layerList
-  }, [venues, selectedVenue, shadowPolygons, handlePinClick, isCloudy, userPos, drawingForVenue, drawPoints])
+  }, [venues, selectedVenue, shadowPolygons, handlePinClick, isCloudy, userPos, drawingForVenue, drawPoints, addMode, pendingPoint])
 
   const status: SunStatus = selectedVenue
     ? (selectedVenue.sun_status ?? (selectedVenue.is_sunny ? 'sunny' : 'shaded'))
@@ -445,6 +543,13 @@ export default function ShadowMapView({
         views={new MapView({ repeat: false })}
         style={{ background: '#f5f0e8' }}
         onClick={(info: any) => {
+          if (addMode) {
+            if (info.coordinate) {
+              const [lng, lat] = info.coordinate
+              handleAddTap(lat, lng)
+            }
+            return
+          }
           if (drawingForVenue) {
             if (info.coordinate) {
               const [lng, lat] = info.coordinate
@@ -454,7 +559,7 @@ export default function ShadowMapView({
           }
           if (!info.object) setSelectedVenue(null)
         }}
-        getCursor={({ isHovering }: { isHovering: boolean }) => drawingForVenue ? 'crosshair' : isHovering ? 'pointer' : 'grab'}
+        getCursor={({ isHovering }: { isHovering: boolean }) => (addMode || drawingForVenue) ? 'crosshair' : isHovering ? 'pointer' : 'grab'}
       />
 
       {/* Loading indicator for buildings */}
@@ -467,6 +572,169 @@ export default function ShadowMapView({
           color: '#666', boxShadow: '0 1px 8px rgba(0,0,0,0.1)', zIndex: 10,
         }}>
           Loading shadows…
+        </div>
+      )}
+
+      {/* Add-venue floating button (logged-in users) */}
+      {userId && !addMode && !drawingForVenue && !selectedVenue && (
+        <button
+          onClick={() => { setSelectedVenue(null); setAddMode(true) }}
+          style={{
+            position: 'absolute', bottom: 24, left: 16, zIndex: 20,
+            background: '#1a2744', color: 'white', border: 'none',
+            borderRadius: '999px', padding: '12px 18px', cursor: 'pointer',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+            display: 'flex', alignItems: 'center', gap: 7,
+            fontSize: 14, fontWeight: 700,
+            fontFamily: "'DM Sans', Helvetica, Arial, sans-serif",
+          }}
+        >
+          <Plus size={17} strokeWidth={2.5} /> Add venue
+        </button>
+      )}
+
+      {/* Add-venue: instruction banner while waiting for a tap */}
+      {addMode && !pendingPoint && (
+        <div style={{
+          position: 'absolute', top: 80, left: '50%', transform: 'translateX(-50%)',
+          background: '#1a2744', color: 'white', borderRadius: 999,
+          padding: '10px 20px', fontSize: 14, fontWeight: 600, zIndex: 30,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.18)', whiteSpace: 'nowrap',
+          fontFamily: "'DM Sans', Helvetica, Arial, sans-serif",
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          <MapPin size={15} strokeWidth={2} /> Tap the map on the venue
+          <button
+            onClick={resetAddFlow}
+            style={{ background: 'rgba(255,255,255,0.15)', color: 'white', border: 'none', borderRadius: 999, padding: '4px 10px', fontSize: 12, cursor: 'pointer', marginLeft: 4 }}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {/* Add-venue: bottom sheet (pick public venue, then confirm) */}
+      {addMode && pendingPoint && (
+        <div style={{
+          position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 30,
+          background: 'white', borderRadius: '20px 20px 0 0',
+          boxShadow: '0 -4px 24px rgba(0,0,0,0.15)',
+          maxHeight: '60vh', display: 'flex', flexDirection: 'column',
+          fontFamily: "'DM Sans', Helvetica, Arial, sans-serif",
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 4px' }}>
+            <div style={{ width: 36, height: 4, borderRadius: 2, background: '#e5e7eb' }} />
+          </div>
+
+          <div style={{ overflowY: 'auto', padding: '4px 20px 24px' }}>
+            {loadingNearby ? (
+              <div style={{ textAlign: 'center', padding: '28px', color: '#999', fontSize: 14 }}>
+                Finding public venues here…
+              </div>
+            ) : chosenVenue ? (
+              // Confirm step — optional details + create
+              <div>
+                <div style={{ fontSize: 19, fontWeight: 700, marginBottom: 2 }}>{chosenVenue.name}</div>
+                <div style={{ fontSize: 13, color: '#888', marginBottom: 18 }}>{chosenVenue.typeLabel}</div>
+
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6, color: '#333' }}>
+                  Opening hours <span style={{ color: '#aaa', fontWeight: 400 }}>(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Mon–Sun 9:00–22:00"
+                  value={openingHours}
+                  onChange={e => setOpeningHours(e.target.value)}
+                  style={{ width: '100%', padding: '11px 13px', borderRadius: 10, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box', marginBottom: 18 }}
+                />
+
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button
+                    onClick={async () => {
+                      setCreating(true)
+                      await onCreateVenue({
+                        name: chosenVenue.name,
+                        lat: chosenVenue.lat,
+                        lng: chosenVenue.lng,
+                        type: chosenVenue.type,
+                        opening_hours: openingHours.trim() || undefined,
+                      })
+                      setCreating(false)
+                      resetAddFlow()
+                    }}
+                    disabled={creating}
+                    style={{
+                      flex: 1, background: '#f97316', color: 'white', border: 'none',
+                      borderRadius: 12, padding: '13px', fontSize: 15, fontWeight: 700,
+                      cursor: creating ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {creating ? 'Adding…' : 'Add to map'}
+                  </button>
+                  <button
+                    onClick={() => setChosenVenue(null)}
+                    style={{ background: '#f3f4f6', color: '#555', border: 'none', borderRadius: 12, padding: '13px 18px', fontSize: 14, cursor: 'pointer' }}
+                  >
+                    Back
+                  </button>
+                </div>
+              </div>
+            ) : nearbyOptions && nearbyOptions.length > 0 ? (
+              // Pick step — choose from nearby public venues
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>Which place is this?</div>
+                <div style={{ fontSize: 13, color: '#888', marginBottom: 14 }}>
+                  Pick the public venue you want to add to the map.
+                </div>
+                {nearbyOptions.map((nv, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setChosenVenue(nv)}
+                    style={{
+                      width: '100%', textAlign: 'left', background: 'white',
+                      border: '1px solid #eee', borderRadius: 12, padding: '13px 14px',
+                      marginBottom: 8, cursor: 'pointer', display: 'flex',
+                      alignItems: 'center', justifyContent: 'space-between', gap: 10,
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontSize: 15, fontWeight: 600 }}>{nv.name}</div>
+                      <div style={{ fontSize: 12, color: '#999', marginTop: 2 }}>{nv.typeLabel}</div>
+                    </div>
+                    <span style={{ fontSize: 12, color: '#bbb', flexShrink: 0 }}>{nv.dist}m</span>
+                  </button>
+                ))}
+                <button
+                  onClick={resetAddFlow}
+                  style={{ background: 'none', border: 'none', color: '#888', fontSize: 13, cursor: 'pointer', marginTop: 6, padding: 4 }}
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              // No public venue found near the tap
+              <div style={{ textAlign: 'center', padding: '8px 0 4px' }}>
+                <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>No public venue found here</div>
+                <div style={{ fontSize: 13, color: '#888', marginBottom: 18, lineHeight: 1.5 }}>
+                  We can only add real, public places. Tap closer to a café, bar, or restaurant.
+                </div>
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+                  <button
+                    onClick={() => setPendingPoint(null)}
+                    style={{ background: '#f97316', color: 'white', border: 'none', borderRadius: 12, padding: '11px 20px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    Try again
+                  </button>
+                  <button
+                    onClick={resetAddFlow}
+                    style={{ background: '#f3f4f6', color: '#555', border: 'none', borderRadius: 12, padding: '11px 20px', fontSize: 14, cursor: 'pointer' }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
