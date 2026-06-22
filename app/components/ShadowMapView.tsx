@@ -7,8 +7,8 @@ import { BitmapLayer, PolygonLayer, ScatterplotLayer } from '@deck.gl/layers'
 import { MapView } from '@deck.gl/core'
 import SunCalc from 'suncalc'
 import { destination } from '@turf/destination'
-import { convex } from '@turf/convex'
-import { point, featureCollection } from '@turf/helpers'
+import { point } from '@turf/helpers'
+import { convexHull } from '../../lib/hull'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type SunStatus = 'sunny' | 'partial' | 'shaded' | 'night'
@@ -58,10 +58,10 @@ function buildShadow(b: Building, bearingDeg: number, lengthKm: number): [number
   const verts = b.geometry.map(g => [g.lon, g.lat] as [number,number])
   const pts = verts.flatMap(([lng, lat]) => {
     const proj = destination(point([lng, lat]), lengthKm, bearingDeg)
-    return [point([lng, lat]), proj]
+    const [plng, plat] = proj.geometry.coordinates
+    return [[lng, lat], [plng, plat]] as [number, number][]
   })
-  const hull = convex(featureCollection(pts))
-  return (hull?.geometry?.coordinates[0] as [number,number][]) ?? null
+  return convexHull(pts)
 }
 
 async function fetchBuildingsNear(lat: number, lng: number): Promise<Building[]> {

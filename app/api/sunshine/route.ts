@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import SunCalc from 'suncalc'
-import { point, polygon, featureCollection } from '@turf/helpers'
+import { point, polygon } from '@turf/helpers'
 import { destination } from '@turf/destination'
-import { convex } from '@turf/convex'
 import { booleanPointInPolygon } from '@turf/boolean-point-in-polygon'
+import { convexHull } from '../../../lib/hull'
 
 const DEFAULT_BUILDING_HEIGHT = 10.5 // metres — typical 3-storey Danish city-centre building
 const MAX_SHADOW_LENGTH = 500        // cap at 500m (very low sun)
@@ -32,9 +32,11 @@ function buildShadowPolygon(
 ) {
   const allPoints = vertices.flatMap(([lng, lat]) => {
     const proj = destination(point([lng, lat]), shadowLengthKm, shadowBearingDeg)
-    return [point([lng, lat]), proj]
+    const [plng, plat] = proj.geometry.coordinates
+    return [[lng, lat], [plng, plat]] as [number, number][]
   })
-  return convex(featureCollection(allPoints))
+  const ring = convexHull(allPoints)
+  return ring ? polygon([ring]) : null
 }
 
 // Sample a grid of points inside the venue polygon
